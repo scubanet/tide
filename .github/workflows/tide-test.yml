@@ -1,0 +1,43 @@
+name: Tide — Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/tide/**'
+      - '.github/workflows/tide-test.yml'
+  pull_request:
+    paths:
+      - 'apps/tide/**'
+      - '.github/workflows/tide-test.yml'
+
+jobs:
+  test:
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: apps/tide
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Test Swift Packages
+        run: |
+          for pkg in Core LLM Speech Selection Hotkeys; do
+            echo "::group::Testing $pkg"
+            (cd Packages/$pkg && swift test) || exit 1
+            echo "::endgroup::"
+          done
+
+      - name: Build Tide app
+        run: |
+          xcodebuild build \
+            -project Tide.xcodeproj \
+            -scheme Tide \
+            -destination "platform=macOS" \
+            CODE_SIGNING_ALLOWED=NO

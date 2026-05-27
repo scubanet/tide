@@ -1,0 +1,73 @@
+name: Tide
+options:
+  bundleIdPrefix: swiss.weckherlin
+  deploymentTarget:
+    macOS: "14.0"
+  developmentLanguage: de
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: "XK8V89P2QV"
+    CODE_SIGN_STYLE: Automatic
+
+packages:
+  Core:
+    path: Packages/Core
+  LLM:
+    path: Packages/LLM
+  TideSpeech:
+    path: Packages/Speech
+  Selection:
+    path: Packages/Selection
+  Hotkeys:
+    path: Packages/Hotkeys
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    from: "2.0.0"
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.6.0"
+
+targets:
+  Tide:
+    type: application
+    platform: macOS
+    sources:
+      - path: Tide
+    resources:
+      - path: Tide/Assets.xcassets
+    dependencies:
+      - package: Core
+      - package: LLM
+      - package: TideSpeech
+      - package: Selection
+      - package: Hotkeys
+      - package: KeyboardShortcuts
+      - package: Sparkle
+    info:
+      path: Tide/Info.plist
+      properties:
+        CFBundleDisplayName: Tide
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSUIElement: true
+        NSMicrophoneUsageDescription: "Tide nutzt das Mikrofon für Push-to-Talk-Eingaben an Claude."
+        NSSpeechRecognitionUsageDescription: "Tide transkribiert deine Sprach-Eingaben."
+        NSAppleEventsUsageDescription: "Tide nutzt Apple Events um mit anderen Apps zu kommunizieren (z.B. für die Text-Ersetzung)."
+        SUFeedURL: "https://github.com/dominikweckherlin/tide/releases/download/appcast.xml"
+        SUPublicEDKey: "TBD-after-sparkle-key-generation"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: swiss.weckherlin.tide
+        CODE_SIGN_ENTITLEMENTS: Tide/Tide.entitlements
+
+  TideTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: TideTests
+    dependencies:
+      - target: Tide
