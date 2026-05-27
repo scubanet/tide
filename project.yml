@@ -58,7 +58,7 @@ targets:
         NSMicrophoneUsageDescription: "Tide nutzt das Mikrofon für Push-to-Talk-Eingaben an Claude."
         NSSpeechRecognitionUsageDescription: "Tide transkribiert deine Sprach-Eingaben."
         NSAppleEventsUsageDescription: "Tide nutzt Apple Events um mit anderen Apps zu kommunizieren (z.B. für die Text-Ersetzung)."
-        SUFeedURL: "https://github.com/dominikweckherlin/tide/releases/download/appcast.xml"
+        SUFeedURL: "https://github.com/scubanet/tide/releases/download/appcast.xml"
         SUPublicEDKey: "TBD-after-sparkle-key-generation"
     settings:
       base:
