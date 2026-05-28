@@ -9,6 +9,7 @@ struct VoiceSection: View {
   @State private var elevenLabsVoices: [ElevenLabsClient.Voice] = []
   @State private var fetchingVoices = false
   @State private var fetchError: String?
+  @State private var showRecognizerKeyMissingHint = false
 
   private var appleVoices: [AVSpeechSynthesisVoice] {
     AVSpeechSynthesisVoice.speechVoices()
@@ -92,6 +93,47 @@ struct VoiceSection: View {
           } header: { Text("ElevenLabs Stimme") }
         }
       }
+
+      Section {
+        // Bridge the typed enum to the String-backed AppSettings property.
+        // AppSettings stores the raw string (Core has no TideSpeech dep);
+        // the picker speaks SpeechRecognizerChoice.
+        Picker("Recognizer:", selection: Binding<SpeechRecognizerChoice>(
+          get: {
+            SpeechRecognizerChoice(rawValue: settings.speechRecognizer)
+              ?? .default
+          },
+          set: { newChoice in
+            // Key-required choice without a stored key? Snap back to
+            // Apple and surface a hint. The hint clears next time the
+            // user lands on a valid combo.
+            if newChoice.requiresElevenLabsKey, elevenLabsKey.isEmpty {
+              settings.speechRecognizer = SpeechRecognizerChoice.apple.rawValue
+              showRecognizerKeyMissingHint = true
+            } else {
+              settings.speechRecognizer = newChoice.rawValue
+              showRecognizerKeyMissingHint = false
+            }
+          }
+        )) {
+          ForEach(SpeechRecognizerChoice.allCases, id: \.self) { choice in
+            Text(choice.displayName).tag(choice)
+          }
+        }
+        .pickerStyle(.radioGroup)
+
+        if showRecognizerKeyMissingHint {
+          Text("ElevenLabs API-Key fehlt — siehe ElevenLabs-Provider oben, "
+            + "dann erneut wählen.")
+            .font(.caption)
+            .foregroundStyle(.orange)
+        }
+
+        Text("Hybrid empfohlen: Apple liefert sofortige Live-Vorschau, "
+          + "ElevenLabs ersetzt am Ende mit höher-genauer Transkription.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      } header: { Text("Spracherkennung") }
 
       Section {
         Toggle("Selektion standardmäßig ersetzen", isOn: Binding(
