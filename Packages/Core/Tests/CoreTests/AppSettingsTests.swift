@@ -27,4 +27,25 @@ final class AppSettingsTests: XCTestCase {
     XCTAssertEqual(reloaded.voiceIdentifier, "com.apple.voice.premium.de-DE.Petra")
     XCTAssertTrue(reloaded.replaceSelectionByDefault)
   }
+
+  @MainActor
+  func testSpeechRecognizerDefaultsToHybrid() {
+    let s = AppSettings(defaults: UserDefaults(suiteName: "test.\(UUID().uuidString)")!)
+    XCTAssertEqual(s.speechRecognizer, "hybrid")
+  }
+
+  @MainActor
+  func testSpeechRecognizerRoundTrip() {
+    let suite = "test.\(UUID().uuidString)"
+    let defs = UserDefaults(suiteName: suite)!
+    let s = AppSettings(defaults: defs)
+    s.speechRecognizer = "elevenLabs"
+    XCTAssertEqual(s.speechRecognizer, "elevenLabs")
+
+    let reloaded = AppSettings(defaults: defs)
+    XCTAssertEqual(reloaded.speechRecognizer, "elevenLabs")
+
+    s.speechRecognizer = "apple"
+    XCTAssertEqual(s.speechRecognizer, "apple")
+  }
 }

@@ -23,6 +23,7 @@ public final class AppSettings {
     static let replaceSelectionByDefault = "tide.replaceSelectionByDefault"
     static let ttsProvider = "tide.ttsProvider"
     static let elevenLabsVoiceID = "tide.elevenLabsVoiceID"
+    static let speechRecognizer = "tide.speechRecognizer"
   }
 
   public var selectedModel: String {
@@ -55,5 +56,18 @@ public final class AppSettings {
   public var elevenLabsVoiceID: String {
     get { defaults.string(forKey: Key.elevenLabsVoiceID) ?? "21m00Tcm4TlvDq8ikWAM" }  // Rachel
     set { defaults.set(newValue, forKey: Key.elevenLabsVoiceID) }
+  }
+
+  /// Which speech recognizer to use. Stored as the raw-string of
+  /// `TideSpeech.SpeechRecognizerChoice`. Default: `"hybrid"`.
+  ///
+  /// Stored as `String` (rather than the typed enum) to keep the `Core`
+  /// package free of any dependency on `TideSpeech`, mirroring the
+  /// existing `ttsProvider` pattern above. Call sites in the app layer
+  /// (`ChatViewModel`, `VoiceSection`) bridge to/from the typed enum
+  /// via `SpeechRecognizerChoice(rawValue:)`.
+  public var speechRecognizer: String {
+    get { defaults.string(forKey: Key.speechRecognizer) ?? "hybrid" }
+    set { defaults.set(newValue, forKey: Key.speechRecognizer) }
   }
 }
