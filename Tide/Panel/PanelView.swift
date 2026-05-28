@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import Core
 import LLM
 
@@ -13,7 +14,8 @@ struct PanelView: View {
       TopBar(
         onNew: { chatViewModel.startNew() },
         onStopSpeaking: { chatViewModel.stopSpeaking() },
-        onOpenSettings: onOpenSettings
+        onOpenSettings: onOpenSettings,
+        onQuit: { NSApp.terminate(nil) }
       )
       Divider()
       if hasKey {
@@ -30,6 +32,7 @@ private struct TopBar: View {
   let onNew: () -> Void
   let onStopSpeaking: () -> Void
   let onOpenSettings: () -> Void
+  let onQuit: () -> Void
 
   var body: some View {
     HStack {
@@ -52,6 +55,16 @@ private struct TopBar: View {
         Image(systemName: "gear")
       }
       .buttonStyle(.borderless)
+      .help("Einstellungen")
+      // ⌘Q is the macOS-standard quit shortcut. Without it (or this
+      // button) there's no obvious exit path — Tide hides its Dock
+      // icon via LSUIElement, so there's no App-menu either.
+      Button(action: onQuit) {
+        Image(systemName: "power.circle")
+      }
+      .buttonStyle(.borderless)
+      .keyboardShortcut("q", modifiers: .command)
+      .help("Tide beenden (⌘Q)")
     }
     .padding(12)
   }
