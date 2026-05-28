@@ -7,12 +7,16 @@ on:
 
 jobs:
   test:
-    runs-on: macos-14
+    # macos-15 ships Xcode 16+ for Swift 6.0. macos-14 is stuck on
+    # Xcode 15.4 / Swift 5.10 and can't build our packages.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
       - name: Select latest stable Xcode
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
 
       - name: Install XcodeGen
         run: brew install xcodegen
