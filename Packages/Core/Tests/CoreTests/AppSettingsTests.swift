@@ -48,4 +48,41 @@ final class AppSettingsTests: XCTestCase {
     s.speechRecognizer = "apple"
     XCTAssertEqual(s.speechRecognizer, "apple")
   }
+
+  @MainActor
+  func testDictationPolishPromptDefaultIsLanguageAgnostic() {
+    let s = AppSettings(defaults: UserDefaults(suiteName: "test.\(UUID().uuidString)")!)
+    XCTAssertEqual(
+      s.dictationPolishPrompt,
+      "You are a text editor. Fix grammar and punctuation in the user's text. Reply in the SAME language as the input. Keep the meaning 1:1, do not shorten, do not add anything, do not explain. Output ONLY the corrected text."
+    )
+  }
+
+  @MainActor
+  func testDictationPolishPromptRoundTrip() {
+    let suite = "test.\(UUID().uuidString)"
+    let defs = UserDefaults(suiteName: suite)!
+    let s = AppSettings(defaults: defs)
+    s.dictationPolishPrompt = "x"
+
+    let reloaded = AppSettings(defaults: defs)
+    XCTAssertEqual(reloaded.dictationPolishPrompt, "x")
+  }
+
+  @MainActor
+  func testDictationPillPositionDefaultsToTopRight() {
+    let s = AppSettings(defaults: UserDefaults(suiteName: "test.\(UUID().uuidString)")!)
+    XCTAssertEqual(s.dictationPillPosition, "topRight")
+  }
+
+  @MainActor
+  func testDictationPillPositionRoundTrip() {
+    let suite = "test.\(UUID().uuidString)"
+    let defs = UserDefaults(suiteName: suite)!
+    let s = AppSettings(defaults: defs)
+    s.dictationPillPosition = "bottomRight"
+
+    let reloaded = AppSettings(defaults: defs)
+    XCTAssertEqual(reloaded.dictationPillPosition, "bottomRight")
+  }
 }

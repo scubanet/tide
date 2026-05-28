@@ -7,6 +7,44 @@ Aktuelle Phase: **pre-release, daily-use by author**, signiertes + notarisiertes
 
 ---
 
+## [0.3.0] — Welle 4: Standalone Dictation (28.05.2026)
+
+SuperWhisper / WisprFlow-Style: Hotkey halten, sprechen, loslassen — der transkribierte Text landet **direkt am Cursor in der gerade fokussierten App**, ohne dass Tide's eigenes Panel aufgeht. Zwei neue Hotkeys, beide opt-in (kein Default).
+
+### Added
+
+- **`Diktieren (Roh)`** — Hotkey halten → Recording → loslassen → Transkription wird 1:1 als Text in die fokussierte App eingefügt. Apple+ElevenLabs Hybrid wie beim PTT
+- **`Diktieren (Polished)`** — wie oben, aber der Text geht vor dem Insert durch Claude (Grammatik + Punktuation, Inhalt unverändert). +1-2s Latenz. System-Prompt in Settings editierbar, sprachunabhängig formuliert (funktioniert für DE/EN/FR ohne Anpassung)
+- **Floating-Pille** mit Live-Apple-Partial-Transcript während der Aufnahme, Position konfigurierbar (oben Mitte / oben rechts / unten rechts, default oben Mitte)
+- **Menubar-Logo** zeigt das Tide-AppIcon statt des SF-Symbols; während der Aufnahme wird's zum roten `wave.3.right.circle.fill` getintet
+- **Settings → Hotkey** mit Recorder-Widgets für die beiden Diktat-Hotkeys; **Settings → Diktat** mit Polish-Prompt-Editor + Pill-Position
+- **`DictationCoordinator`**, **`DictationIndicator`**, **`DictationPolisher`**, **`TextInjector`**, **`MenubarTint`**, **`FloatingPill`** als neue Module unter `Tide/Dictation/`
+- **`RecognizerFactory`** extrahiert die Recognizer-Konstruktion aus `ChatViewModel` — Coordinator + ViewModel teilen sich dieselbe Logik (Apple/ElevenLabs/Hybrid mit Fallback)
+- **`ClipboardPaste`** als wiederverwendbares Helper aus `SelectionReplacer` extrahiert
+- **Tests**: `RecognizerFactoryTests`, `TextInjectorTests`, `DictationPolisherTests`
+
+### Architektur-Entscheidungen
+
+- **Clipboard-Paste-First, AX-Insert nur als Fallback** für Tide-frontmost. AX-Insert sagt in WKWebView/Electron-Apps (Spark, Slack, Notion-web, VS Code) erfolgreich „set" und schluckt den Text dann silent — beobachtet im Live-Test mit Spark. ⌘V ist robust überall wo Paste geht
+- **Polish-Failure-Fallback**: jede Polish-Exception (kein Key, Netz, Timeout 8s, leere Antwort) injiziert den Roh-Text + User-Notification „Polish-Modus fehlgeschlagen". Daily-Use darf nicht blockieren
+- **Default-Polish-Prompt sprachunabhängig** auf Englisch („Reply in the SAME language as the input") — User mit DE/EN/FR-Aufnahmen muss nichts anpassen
+- **Pille als `nonactivatingPanel` ohne `canBecomeKey`** — die Source-App behält Focus während der gesamten Session, kein Window-Wechsel
+- **Hotkeys ohne Default-Binding** — opt-in. Feature aktiviert sich nur wenn der User einen Hotkey setzt, kein Auto-Hijack bekannter Tasten
+
+### Tests
+
+- `RecognizerFactoryTests` — alle vier Branches (Apple-only, EL mit/ohne Key, Hybrid)
+- `TextInjectorTests` — Empty-Skip, Whitespace-Trim, Strategy-Selection
+- `DictationPolisherTests` — Happy-Path, System-Prompt-Forwarding, Empty/Whitespace, Timeout (testbar via Constructor-Param), Missing-API-Key, Provider-Error
+
+### Bekannte Limits
+
+- Notification-Berechtigung wird erst beim ersten Lauf abgefragt; in Debug-Builds gelegentlich übersprungen — im notarisierten Release sollte sie zuverlässig kommen. Pasteboard wird trotzdem immer gefüllt
+- Kein cross-handler Lock zwischen Push-to-Talk und Dictation — zwei gleichzeitige Hotkey-Holds racen über den AudioRecorder. Sehr unwahrscheinlich, könnte in v0.3.1 nachgezogen werden
+- Dictation-History (letzte 10 Roh-Transkripte, click-to-re-inject) → v0.3.1
+
+---
+
 ## [0.2.1] — Diktiermodus + Quit-Button + Single-Instance (28.05.2026)
 
 ### Added

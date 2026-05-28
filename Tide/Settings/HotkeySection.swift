@@ -11,7 +11,24 @@ struct HotkeySection: View {
           .font(.caption)
           .foregroundStyle(.secondary)
       } header: {
-        Text("Globaler Hotkey")
+        Text("Claude (Panel)")
+      }
+
+      Section {
+        KeyboardShortcuts.Recorder("Diktieren (Roh):", name: .dictateRaw)
+        Text("Halten zum Aufnehmen, loslassen fügt den transkribierten Text "
+          + "1:1 an der Cursor-Position der gerade fokussierten App ein. "
+          + "Tide-Panel öffnet sich nicht. Kein Default — bitte setzen.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+
+        KeyboardShortcuts.Recorder("Diktieren (Polished):", name: .dictatePolished)
+        Text("Wie oben, aber der Text geht vor dem Einfügen durch Claude "
+          + "(Grammatik + Punktuation, Inhalt 1:1). +1-2s Latenz.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      } header: {
+        Text("Standalone Dictation (Welle 4)")
       }
     }
     .formStyle(.grouped)

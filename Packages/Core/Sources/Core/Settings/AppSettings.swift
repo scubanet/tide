@@ -25,6 +25,8 @@ public final class AppSettings {
     static let elevenLabsVoiceID = "tide.elevenLabsVoiceID"
     static let speechRecognizer = "tide.speechRecognizer"
     static let autoSendAfterPushToTalk = "tide.autoSendAfterPushToTalk"
+    static let dictationPolishPrompt = "tide.dictationPolishPrompt"
+    static let dictationPillPosition = "tide.dictationPillPosition"
   }
 
   public var selectedModel: String {
@@ -82,5 +84,32 @@ public final class AppSettings {
   public var autoSendAfterPushToTalk: Bool {
     get { defaults.object(forKey: Key.autoSendAfterPushToTalk) as? Bool ?? true }
     set { defaults.set(newValue, forKey: Key.autoSendAfterPushToTalk) }
+  }
+
+  /// System prompt used by the polished-dictation hotkey (Tide v0.3.0,
+  /// Welle 4 — see `docs/specs/2026-05-28-standalone-dictation-design.md`).
+  /// Sent to Claude before the raw transcript to clean up grammar +
+  /// punctuation. The default is intentionally language-agnostic so
+  /// it works for DE/EN/FR inputs without per-language tuning; the
+  /// model is instructed to reply in the same language as the input.
+  public var dictationPolishPrompt: String {
+    get {
+      defaults.string(forKey: Key.dictationPolishPrompt)
+        ?? "You are a text editor. Fix grammar and punctuation in the user's text. Reply in the SAME language as the input. Keep the meaning 1:1, do not shorten, do not add anything, do not explain. Output ONLY the corrected text."
+    }
+    set { defaults.set(newValue, forKey: Key.dictationPolishPrompt) }
+  }
+
+  /// Screen-corner placement of the floating dictation pill that shows
+  /// the live Apple-partial transcript during a dictation session
+  /// (Tide v0.3.0, Welle 4 — see
+  /// `docs/specs/2026-05-28-standalone-dictation-design.md`). Stored
+  /// as a raw `String` to keep the `Core` package free of any AppKit
+  /// dependency. Valid values: `"topRight"`, `"topCenter"`,
+  /// `"bottomRight"`. Default `"topCenter"` — sits just under the
+  /// menubar without covering app-window content on either side.
+  public var dictationPillPosition: String {
+    get { defaults.string(forKey: Key.dictationPillPosition) ?? "topCenter" }
+    set { defaults.set(newValue, forKey: Key.dictationPillPosition) }
   }
 }

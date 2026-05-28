@@ -12,6 +12,8 @@ struct SettingsWindow: View {
         .tabItem { Label("Modell", systemImage: "cpu") }
       VoiceSection()
         .tabItem { Label("Stimme", systemImage: "waveform") }
+      DictationSection()
+        .tabItem { Label("Diktat", systemImage: "mic.fill") }
       QuickActionsEditor()
         .tabItem { Label("Actions", systemImage: "bolt") }
     }

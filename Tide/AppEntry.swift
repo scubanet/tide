@@ -2,6 +2,8 @@ import SwiftUI
 import AppKit
 import Core
 import Hotkeys
+import KeyboardShortcuts
+import LLM
 
 @main
 struct TideApp: App {
@@ -16,6 +18,7 @@ final class TideAppDelegate: NSObject, NSApplicationDelegate {
   @MainActor private var menubarController: MenubarController?
   @MainActor private var conversationStore: ConversationStore?
   @MainActor private var pushToTalk: PushToTalkHandler?
+  @MainActor private var dictationCoordinator: DictationCoordinator?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     // Single-instance enforcement: if another Tide is already running
@@ -38,7 +41,22 @@ final class TideAppDelegate: NSObject, NSApplicationDelegate {
       do {
         let store = try ConversationStore()
         self.conversationStore = store
-        let controller = MenubarController(conversationStore: store)
+
+        // Build settings + LLM provider once and share them across all
+        // collaborators that need them. Welle 4 adds the dictation
+        // coordinator, which needs the same configuration the
+        // MenubarController's ChatViewModel uses — keep them on a
+        // single instance so user-tweaks in Settings propagate to both
+        // flows without a restart.
+        let settings = AppSettings()
+        let apiKey = KeychainHelper.get(key: "anthropic.api_key") ?? ""
+        let provider = AnthropicProvider(apiKey: apiKey)
+
+        let controller = MenubarController(
+          conversationStore: store,
+          settings: settings,
+          provider: provider
+        )
         self.menubarController = controller
         self.pushToTalk = PushToTalkHandler(
           onPress: { [weak controller] in
@@ -59,6 +77,39 @@ final class TideAppDelegate: NSObject, NSApplicationDelegate {
             }
           }
         )
+
+        // Welle 4 — standalone dictation. Two new hotkeys, opt-in
+        // (no default binding). On press we start a background
+        // recording that bypasses the Tide panel entirely; on
+        // release the transcript is logged (Phase B) and later
+        // injected into the frontmost app's cursor (Phase D).
+        let dictation = DictationCoordinator(
+          settings: settings,
+          provider: provider
+        )
+        self.dictationCoordinator = dictation
+        // Phase C: pair the dictation coordinator with the menubar's
+        // existing status item so it can tint the icon red and show a
+        // floating pill while a session is in flight. The indicator
+        // never steals focus — the pill is a non-activating panel and
+        // we only mutate the status item's image, not its window state.
+        let indicator = DictationIndicator(
+          statusItem: controller.menubarStatusItem,
+          settings: settings
+        )
+        dictation.attachIndicator(indicator)
+        KeyboardShortcuts.onKeyDown(for: .dictateRaw) {
+          Task { @MainActor in await dictation.start(mode: .raw) }
+        }
+        KeyboardShortcuts.onKeyUp(for: .dictateRaw) {
+          Task { @MainActor in await dictation.stop() }
+        }
+        KeyboardShortcuts.onKeyDown(for: .dictatePolished) {
+          Task { @MainActor in await dictation.start(mode: .polished) }
+        }
+        KeyboardShortcuts.onKeyUp(for: .dictatePolished) {
+          Task { @MainActor in await dictation.stop() }
+        }
       } catch {
         NSLog("Tide: failed to init store: \(error)")
       }
