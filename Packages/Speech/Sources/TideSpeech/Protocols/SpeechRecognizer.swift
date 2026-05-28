@@ -26,3 +26,29 @@ public enum SpeechRecognizerError: Error, Sendable {
   case unavailable
   case generic(String)
 }
+
+/// User-facing choice for which speech recognizer to use.
+/// Persisted in AppSettings (raw string).
+public enum SpeechRecognizerChoice: String, Sendable, CaseIterable, Codable {
+  case apple
+  case elevenLabs
+  case hybrid
+
+  public static let `default`: Self = .hybrid
+
+  public var displayName: String {
+    switch self {
+    case .apple:      "Apple (on-device, gratis)"
+    case .elevenLabs: "ElevenLabs (höhere Genauigkeit)"
+    case .hybrid:     "Hybrid (Apple live + ElevenLabs final)"
+    }
+  }
+
+  /// True if this choice requires an ElevenLabs API key to be set.
+  public var requiresElevenLabsKey: Bool {
+    switch self {
+    case .apple:                   false
+    case .elevenLabs, .hybrid:     true
+    }
+  }
+}
