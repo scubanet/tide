@@ -263,22 +263,30 @@ final class ChatViewModel {
 
   func stopRecording() async {
     guard isRecording, let recorder else { return }
-    isRecording = false
+    // Don't flip isRecording yet — keep the live-transcript pill on
+    // screen until we have the final text. Otherwise SwiftUI swaps to
+    // the (still-empty) TextField in the gap between recorder.stop()
+    // starting and the trimmed text getting written, and in
+    // dictation-mode that empty TextField is what the user is stuck
+    // staring at.
     do {
       let finalText = try await recorder.stop()
       let trimmed = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
       if !trimmed.isEmpty {
         input = trimmed
-        // Dictation mode: when the user has disabled auto-send the
-        // transcription just lands in the input field — they can edit
-        // and submit manually. Default (true) preserves the original
-        // push-to-talk-and-send behavior.
-        if settings.autoSendAfterPushToTalk {
-          await send()
-        }
+      }
+      isRecording = false
+      // Dictation mode: when the user has disabled auto-send the
+      // transcription just lands in the input field — they can edit
+      // and submit manually. Default (true) preserves the original
+      // push-to-talk-and-send behavior.
+      if !trimmed.isEmpty, settings.autoSendAfterPushToTalk {
+        await send()
       }
     } catch {
-      // Swallow — UI will just show no result.
+      // Recorder failed — drop the recording-state so the UI can
+      // recover. The user sees an empty TextField, nothing crashes.
+      isRecording = false
     }
     self.recorder = nil
     partialTask?.cancel()

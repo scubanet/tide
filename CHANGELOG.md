@@ -18,6 +18,7 @@ Aktuelle Phase: **pre-release, daily-use by author**, signiertes + notarisiertes
 ### Fixed
 
 - **Single-Instance-Enforcement**: Wenn Tide bereits läuft (z.B. ein Xcode-Build während die `/Applications`-Version zusätzlich gestartet wird), gibt die neue Instanz Kontrolle an die existierende ab und beendet sich selbst. Vorher: zwei Status-Items im Menubar, beide registrieren denselben Push-to-Talk-Hotkey, Mikrofon-Race, ein Panel hat den Input, das andere den Recording-State
+- **Diktiermodus zeigte den transkribierten Text nicht im Eingabefeld**: `stopRecording()` flippte `isRecording` zu früh, SwiftUI re-renderte die HStack auf das leere TextField bevor `input = trimmed` lief. Jetzt: input wird zuerst gesetzt, dann isRecording umgelegt — TextField erscheint direkt mit dem richtigen Wert
 
 ---
 
