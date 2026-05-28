@@ -7,13 +7,17 @@ Aktuelle Phase: **pre-release, daily-use by author**, signiertes + notarisiertes
 
 ---
 
-## [0.2.1] — Diktiermodus + Quit-Button (28.05.2026)
+## [0.2.1] — Diktiermodus + Quit-Button + Single-Instance (28.05.2026)
 
 ### Added
 
 - **Settings → Push-to-Talk-Verhalten → "Nach Push-to-Talk automatisch senden"** — Toggle, default an. Wenn aus: transkribierter Text landet im Eingabefeld zum Editieren und manuellen Absenden via Return. Reiner Diktiermodus für längere oder zu polierende Texte
 - `AppSettings.autoSendAfterPushToTalk` als persisted Preference (UserDefaults, default `true`, kompatibel mit Bestandsnutzern)
 - **Quit-Button in der Top-Bar** (⌘Q Shortcut, `power.circle` Icon). Tide läuft als `LSUIElement` ohne Dock-Icon — vorher gab es keinen offensichtlichen Beenden-Weg
+
+### Fixed
+
+- **Single-Instance-Enforcement**: Wenn Tide bereits läuft (z.B. ein Xcode-Build während die `/Applications`-Version zusätzlich gestartet wird), gibt die neue Instanz Kontrolle an die existierende ab und beendet sich selbst. Vorher: zwei Status-Items im Menubar, beide registrieren denselben Push-to-Talk-Hotkey, Mikrofon-Race, ein Panel hat den Input, das andere den Recording-State
 
 ---
 

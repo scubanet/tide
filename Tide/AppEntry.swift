@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import Core
 import Hotkeys
 
@@ -17,6 +18,22 @@ final class TideAppDelegate: NSObject, NSApplicationDelegate {
   @MainActor private var pushToTalk: PushToTalkHandler?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    // Single-instance enforcement: if another Tide is already running
+    // (e.g. a leftover Xcode-built one while the user double-clicks the
+    // shipped /Applications copy, or vice versa) we hand control back
+    // to it and terminate this one. Two instances would otherwise both
+    // register the same global push-to-talk hotkey, both stick a status
+    // item in the menubar, and fight over the microphone.
+    if let bundleID = Bundle.main.bundleIdentifier {
+      let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+        .filter { $0 != NSRunningApplication.current }
+      if let existing = others.first {
+        existing.activate(options: [])
+        NSApp.terminate(nil)
+        return
+      }
+    }
+
     Task { @MainActor in
       do {
         let store = try ConversationStore()
