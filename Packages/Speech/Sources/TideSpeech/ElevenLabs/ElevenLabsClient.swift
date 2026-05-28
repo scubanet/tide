@@ -1,12 +1,13 @@
 import Foundation
 
-/// Thin client for the ElevenLabs Text-to-Speech REST API.
+/// Thin client for the ElevenLabs REST API (Text-to-Speech + Scribe STT).
 ///
-/// Two endpoints used:
-///   1. `GET /v1/voices` — list available voices for the API-key holder
-///   2. `POST /v1/text-to-speech/{voice_id}` — synthesise text to MP3 bytes
+/// Endpoints used:
+///   1. `GET  /v1/voices`                       — list available voices
+///   2. `POST /v1/text-to-speech/{voice_id}`    — synthesise text to MP3 bytes
+///   3. `POST /v1/speech-to-text`               — transcribe audio via Scribe
 ///
-/// We use the non-streaming endpoint. Per-sentence latency is ~500–1200ms,
+/// We use the non-streaming TTS endpoint. Per-sentence latency is ~500–1200ms,
 /// which is acceptable for our use (sentences flushed as Claude streams).
 /// Switch to `/v1/text-to-speech/{voice_id}/stream` later if needed.
 public struct ElevenLabsClient: Sendable {
@@ -89,4 +90,75 @@ public struct ElevenLabsClient: Sendable {
       throw Error.server(code: http.statusCode, body: "")
     }
   }
+}
+
+// MARK: - Scribe (Speech-to-Text)
+
+public extension ElevenLabsClient {
+  /// Transcribe audio via Scribe (ElevenLabs Speech-to-Text).
+  /// Audio: WAV-encoded (16 kHz mono Int16 recommended). Returns the
+  /// transcribed text. Throws `ElevenLabsClient.Error` on non-2xx.
+  func transcribe(audioData: Data) async throws -> String {
+    let url = URL(string: "https://api.elevenlabs.io/v1/speech-to-text")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
+
+    let boundary = "Tide-\(UUID().uuidString)"
+    request.setValue(
+      "multipart/form-data; boundary=\(boundary)",
+      forHTTPHeaderField: "Content-Type"
+    )
+
+    request.httpBody = Self.multipartBody(
+      boundary: boundary,
+      fields: [
+        "model_id":               "scribe_v1",
+        "tag_audio_events":       "false",
+        "timestamps_granularity": "none",
+        "diarize":                "false",
+      ],
+      file: (name: "file", filename: "audio.wav", mime: "audio/wav", data: audioData)
+    )
+
+    let (data, response) = try await session.data(for: request)
+    try Self.checkOK(response)
+
+    let decoded = try JSONDecoder().decode(ScribeResponse.self, from: data)
+    return decoded.text
+  }
+
+  /// Build a multipart/form-data body with text fields + one file part.
+  internal static func multipartBody(
+    boundary: String,
+    fields: [String: String],
+    file: (name: String, filename: String, mime: String, data: Data)
+  ) -> Data {
+    var body = Data()
+    let nl = "\r\n"
+    let dashBoundary = "--\(boundary)"
+
+    for (key, value) in fields {
+      body.append("\(dashBoundary)\(nl)".data(using: .utf8)!)
+      body.append("Content-Disposition: form-data; name=\"\(key)\"\(nl)\(nl)".data(using: .utf8)!)
+      body.append("\(value)\(nl)".data(using: .utf8)!)
+    }
+
+    body.append("\(dashBoundary)\(nl)".data(using: .utf8)!)
+    body.append(
+      "Content-Disposition: form-data; name=\"\(file.name)\"; filename=\"\(file.filename)\"\(nl)"
+        .data(using: .utf8)!
+    )
+    body.append("Content-Type: \(file.mime)\(nl)\(nl)".data(using: .utf8)!)
+    body.append(file.data)
+    body.append("\(nl)\(dashBoundary)--\(nl)".data(using: .utf8)!)
+
+    return body
+  }
+}
+
+private struct ScribeResponse: Decodable {
+  let text: String
+  let language_code: String?
+  let language_probability: Double?
 }
