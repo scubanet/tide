@@ -22,6 +22,16 @@ final class AudioRecorder {
   private let recognizer: any SpeechRecognizer
   private var isRunning = false
 
+  /// Parallel PCM-buffer collector. The recognizer-tap pushes each
+  /// AVAudioPCMBuffer here as well as into the recognizer, so the
+  /// ElevenLabs / Hybrid recognizers can pull a WAV-encoded snapshot
+  /// via `bufferAccumulator.exportWAV(...)` on `stop()`.
+  ///
+  /// Owned by the recorder (not the recognizer) because it's the
+  /// recorder that has the tap. Recognizers reference it via a closure
+  /// captured at init-time (see `ChatViewModel.makeRecognizer`).
+  let bufferAccumulator = AudioBufferAccumulator()
+
   init(recognizer: any SpeechRecognizer) {
     self.recognizer = recognizer
   }
@@ -35,6 +45,9 @@ final class AudioRecorder {
   func start() async throws {
     guard !isRunning else { return }
     log.debug("AudioRecorder.start: begin")
+    // Drop any audio left from a previous session so the next
+    // ElevenLabs/Hybrid exportWAV only sees this session's audio.
+    bufferAccumulator.reset()
     try await recognizer.start()
     log.debug("AudioRecorder.start: recognizer ready")
 
@@ -48,14 +61,17 @@ final class AudioRecorder {
     }
 
     let capturedRecognizer = recognizer
+    let capturedAccumulator = bufferAccumulator
     // The tap closure MUST be explicitly `@Sendable` to break the MainActor
     // inheritance from this method's enclosing context. Without it Swift
     // treats the closure as MainActor-isolated, and the audio render thread
     // (which is NOT a Swift task / cooperative-thread) fails the runtime
     // executor check with `_dispatch_assert_queue_fail` the first time a
-    // buffer arrives. The closure body itself only touches a `Sendable`
-    // recognizer reference, so it's safe to run anywhere.
-    let block: @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void = { [capturedRecognizer] buffer, _ in
+    // buffer arrives. The closure body only touches Sendable references
+    // (the recognizer and the lock-guarded accumulator), so it's safe to
+    // run on the audio render thread.
+    let block: @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void = { [capturedRecognizer, capturedAccumulator] buffer, _ in
+      capturedAccumulator.append(buffer)
       capturedRecognizer.feed(buffer)
     }
     input.installTap(onBus: 0, bufferSize: 1024, format: format, block: block)
