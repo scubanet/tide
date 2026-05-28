@@ -207,7 +207,13 @@ final class ChatViewModel {
   func startRecording() async {
     guard !isRecording else { return }
     synthesizer.stop()
-    let recognizer = AppleSpeechRecognizer()
+    // Recognizer is chosen per-session from current settings.
+    // ElevenLabs/Hybrid pull WAV-data from the recorder's
+    // bufferAccumulator on stop() via the closure built in makeRecognizer.
+    let choice = SpeechRecognizerChoice(rawValue: settings.speechRecognizer)
+      ?? .default
+    let apiKey = KeychainHelper.get(key: "elevenlabs.api_key")
+    let recognizer = makeRecognizer(for: choice, apiKey: apiKey)
     let recorder = AudioRecorder(recognizer: recognizer)
     self.recorder = recorder
     liveTranscript = ""
@@ -247,6 +253,59 @@ final class ChatViewModel {
     self.recorder = nil
     partialTask?.cancel()
     liveTranscript = ""
+  }
+
+  /// Build the recognizer matching the user's Settings choice.
+  ///
+  /// - Apple: pure `AppleSpeechRecognizer`.
+  /// - ElevenLabs: `ElevenLabsRecognizer` with a bufferProvider that
+  ///   reaches back to the *current* AudioRecorder's accumulator and
+  ///   exports it as 16kHz mono WAV. The closure captures `self` weakly
+  ///   so a leftover recognizer (e.g. cancelled session) can't keep
+  ///   the view-model alive.
+  /// - Hybrid: composes Apple (live partials) + ElevenLabs (final replace).
+  ///
+  /// Fallback: if a non-Apple choice is selected but no API key is set,
+  /// silently fall back to Apple. The Settings-Picker enforces the key
+  /// constraint with a visible warning, this is the runtime safety-net.
+  private func makeRecognizer(
+    for choice: SpeechRecognizerChoice,
+    apiKey: String?
+  ) -> any SpeechRecognizer {
+    let apple = AppleSpeechRecognizer()
+
+    guard choice != .apple, let key = apiKey, !key.isEmpty else {
+      return apple
+    }
+
+    let client = ElevenLabsClient(apiKey: key)
+    let elevenRecognizer = ElevenLabsRecognizer(
+      client: client,
+      bufferProvider: { [weak self] in
+        // Hop to MainActor: ChatViewModel and AudioRecorder are
+        // MainActor-isolated, but bufferProvider is `@Sendable`.
+        // The accumulator's exportWAV is thread-safe (internal NSLock),
+        // so we read recorder/accumulator references via a synchronous
+        // MainActor.assumeIsolated. bufferProvider is invoked from
+        // ElevenLabsRecognizer.stop(), which is always called from
+        // ChatViewModel.stopRecording() — i.e. the main actor.
+        MainActor.assumeIsolated {
+          self?.recorder?.bufferAccumulator
+            .exportWAV(sampleRate: 16000, channels: 1)
+        }
+      }
+    )
+
+    switch choice {
+    case .elevenLabs:
+      return elevenRecognizer
+    case .hybrid:
+      return HybridRecognizer(apple: apple, eleven: elevenRecognizer)
+    case .apple:
+      // Unreachable per the guard above, but the switch needs to be
+      // exhaustive over the enum.
+      return apple
+    }
   }
 
   private let defaultSystemPrompt = """
