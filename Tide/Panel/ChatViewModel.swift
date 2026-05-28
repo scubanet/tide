@@ -204,17 +204,41 @@ final class ChatViewModel {
     selectedActionSlug = nil
   }
 
+  /// Stop any in-flight or queued TTS playback. Safe to call when
+  /// nothing is speaking — synthesizer.stop() is a no-op in that case.
+  /// We also clear the sentence-buffer so a still-streaming LLM response
+  /// doesn't immediately resume speech with the leftover tokens; the
+  /// remaining text still lands in the chat as usual (we only mute the
+  /// audio, never the visible message).
+  func stopSpeaking() {
+    synthesizer.stop()
+    pendingForTTS = ""
+  }
+
   func startRecording() async {
     guard !isRecording else { return }
     synthesizer.stop()
     // Recognizer is chosen per-session from current settings.
-    // ElevenLabs/Hybrid pull WAV-data from the recorder's
-    // bufferAccumulator on stop() via the closure built in makeRecognizer.
+    // We pre-create the AudioBufferAccumulator and hand the *same*
+    // instance to both makeRecognizer (so its bufferProvider closure
+    // can pull WAV-data on stop()) and AudioRecorder (so its tap
+    // can push PCM into it). This avoids the previous design where
+    // the closure had to reach back to `self.recorder?.bufferAccumulator`
+    // through a MainActor-hop — which crashed when the closure was
+    // invoked from ElevenLabsRecognizer.stop()'s async executor.
     let choice = SpeechRecognizerChoice(rawValue: settings.speechRecognizer)
       ?? .default
     let apiKey = KeychainHelper.get(key: "elevenlabs.api_key")
-    let recognizer = makeRecognizer(for: choice, apiKey: apiKey)
-    let recorder = AudioRecorder(recognizer: recognizer)
+    let accumulator = AudioBufferAccumulator()
+    let recognizer = makeRecognizer(
+      for: choice,
+      apiKey: apiKey,
+      accumulator: accumulator
+    )
+    let recorder = AudioRecorder(
+      recognizer: recognizer,
+      bufferAccumulator: accumulator
+    )
     self.recorder = recorder
     liveTranscript = ""
     isRecording = true
@@ -259,10 +283,11 @@ final class ChatViewModel {
   ///
   /// - Apple: pure `AppleSpeechRecognizer`.
   /// - ElevenLabs: `ElevenLabsRecognizer` with a bufferProvider that
-  ///   reaches back to the *current* AudioRecorder's accumulator and
-  ///   exports it as 16kHz mono WAV. The closure captures `self` weakly
-  ///   so a leftover recognizer (e.g. cancelled session) can't keep
-  ///   the view-model alive.
+  ///   captures the caller-supplied `AudioBufferAccumulator` directly.
+  ///   The same accumulator is also handed to `AudioRecorder` so its
+  ///   tap pushes PCM into it. No `self`, no MainActor-hop —
+  ///   `AudioBufferAccumulator` is `@unchecked Sendable` (internal NSLock),
+  ///   safe to read from any thread.
   /// - Hybrid: composes Apple (live partials) + ElevenLabs (final replace).
   ///
   /// Fallback: if a non-Apple choice is selected but no API key is set,
@@ -270,7 +295,8 @@ final class ChatViewModel {
   /// constraint with a visible warning, this is the runtime safety-net.
   private func makeRecognizer(
     for choice: SpeechRecognizerChoice,
-    apiKey: String?
+    apiKey: String?,
+    accumulator: AudioBufferAccumulator
   ) -> any SpeechRecognizer {
     let apple = AppleSpeechRecognizer()
 
@@ -281,18 +307,10 @@ final class ChatViewModel {
     let client = ElevenLabsClient(apiKey: key)
     let elevenRecognizer = ElevenLabsRecognizer(
       client: client,
-      bufferProvider: { [weak self] in
-        // Hop to MainActor: ChatViewModel and AudioRecorder are
-        // MainActor-isolated, but bufferProvider is `@Sendable`.
-        // The accumulator's exportWAV is thread-safe (internal NSLock),
-        // so we read recorder/accumulator references via a synchronous
-        // MainActor.assumeIsolated. bufferProvider is invoked from
-        // ElevenLabsRecognizer.stop(), which is always called from
-        // ChatViewModel.stopRecording() — i.e. the main actor.
-        MainActor.assumeIsolated {
-          self?.recorder?.bufferAccumulator
-            .exportWAV(sampleRate: 16000, channels: 1)
-        }
+      bufferProvider: {
+        // Pure value-capture of the accumulator (Sendable).
+        // No `self`, no MainActor — safe from any executor.
+        accumulator.exportWAV(sampleRate: 16000, channels: 1)
       }
     )
 

@@ -3,22 +3,16 @@ name: Tide — Test
 on:
   push:
     branches: [main]
-    paths:
-      - 'apps/tide/**'
-      - '.github/workflows/tide-test.yml'
   pull_request:
-    paths:
-      - 'apps/tide/**'
-      - '.github/workflows/tide-test.yml'
 
 jobs:
   test:
     runs-on: macos-14
-    defaults:
-      run:
-        working-directory: apps/tide
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select latest stable Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
 
       - name: Install XcodeGen
         run: brew install xcodegen

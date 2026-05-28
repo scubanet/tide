@@ -1,0 +1,145 @@
+name: Release
+
+# Tagging a vX.Y.Z commit kicks off the full pipeline: build → sign →
+# notarize → DMG → sign appcast → publish as a GitHub Release.
+#
+# Required repository Secrets (Settings → Secrets and variables → Actions):
+#   MACOS_CERT_P12_BASE64   Developer ID Application .p12 export, base64
+#   MACOS_CERT_PASSWORD     password used when exporting the .p12
+#   KEYCHAIN_PASSWORD       any throwaway string — used to lock the
+#                           ephemeral keychain on the runner
+#   ASC_API_KEY_ID          App Store Connect API Key ID (10 chars)
+#   ASC_API_ISSUER_ID       App Store Connect Issuer ID (UUID)
+#   ASC_API_KEY_BASE64      the AuthKey_XXX.p8 contents, base64-encoded
+#   SPARKLE_ED_PRIVATE_KEY  the ed25519 private key, exported from the
+#                           Sparkle Keychain entry as raw base64 (one
+#                           line). See docs/RELEASE.md for the export
+#                           command.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # needed to create a GitHub Release
+
+jobs:
+  release:
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so sign_appcast can walk tags
+
+      - name: Read version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Select latest stable Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      #————— ephemeral signing keychain —————#
+      # Importing the cert into a throwaway keychain (rather than the
+      # runner's login keychain) means CI runs are hermetic — no leftover
+      # state between builds.
+      - name: Set up signing keychain
+        env:
+          P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/tide-signing.keychain-db"
+          echo "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/cert.p12" \
+            -P "$P12_PASSWORD" \
+            -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychain -d user | xargs)
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      #————— App Store Connect API key for notarization —————#
+      - name: Set up notarytool credentials
+        env:
+          ASC_KEY_BASE64: ${{ secrets.ASC_API_KEY_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_ISSUER: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          echo "$ASC_KEY_BASE64" | base64 --decode > "$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+          xcrun notarytool store-credentials "tide-notary" \
+            --key "$KEY_PATH" \
+            --key-id "$ASC_KEY_ID" \
+            --issuer "$ASC_ISSUER"
+
+      #————— Sparkle release tools —————#
+      - name: Install Sparkle release tools
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/sparkle-tools && cd /tmp/sparkle-tools
+          SPARKLE_TAG=$(curl -sL https://api.github.com/repos/sparkle-project/Sparkle/releases/latest \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'])")
+          echo "Sparkle: $SPARKLE_TAG"
+          curl -L "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_TAG}/Sparkle-${SPARKLE_TAG}.tar.xz" \
+            -o sparkle.tar.xz
+          tar -xJf sparkle.tar.xz
+
+      - name: Stage Sparkle private key
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          # sign_update -f expects the raw private-key string (the same
+          # opaque base64 blob Sparkle stored in your local Keychain).
+          # We never write it to a path under the workspace.
+          echo "$SPARKLE_ED_PRIVATE_KEY" > "$RUNNER_TEMP/sparkle-ed-private-key"
+          chmod 600 "$RUNNER_TEMP/sparkle-ed-private-key"
+          echo "SPARKLE_PRIVATE_KEY_FILE=$RUNNER_TEMP/sparkle-ed-private-key" >> "$GITHUB_ENV"
+
+      #————— build + sign + notarize —————#
+      - name: Build, sign, notarize, DMG
+        run: bash scripts/release.sh
+
+      #————— appcast —————#
+      - name: Sign appcast
+        env:
+          SPARKLE_BIN: /tmp/sparkle-tools/bin
+        run: bash scripts/sign_appcast.sh "${{ steps.ver.outputs.version }}"
+
+      #————— publish —————#
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Pull just this release's section out of CHANGELOG for the
+          # release-body. Falls back to a one-liner if no matching
+          # section is found.
+          NOTES=$(awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" { found=1; print; next }
+            found && $0 ~ "^## \\[" { exit }
+            found { print }
+          ' CHANGELOG.md)
+          if [[ -z "$NOTES" ]]; then
+            NOTES="Tide ${VERSION}"
+          fi
+          echo "$NOTES" > "$RUNNER_TEMP/release-notes.md"
+          gh release create "v${VERSION}" \
+            "build/Tide-${VERSION}.dmg" \
+            "build/appcast.xml" \
+            --title "Tide ${VERSION}" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"

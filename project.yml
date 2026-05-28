@@ -9,8 +9,8 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
-    MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "0.2.0"
+    CURRENT_PROJECT_VERSION: "2"
     DEVELOPMENT_TEAM: "XK8V89P2QV"
     CODE_SIGN_STYLE: Automatic
 
@@ -58,8 +58,8 @@ targets:
         NSMicrophoneUsageDescription: "Tide nutzt das Mikrofon für Push-to-Talk-Eingaben an Claude."
         NSSpeechRecognitionUsageDescription: "Tide transkribiert deine Sprach-Eingaben."
         NSAppleEventsUsageDescription: "Tide nutzt Apple Events um mit anderen Apps zu kommunizieren (z.B. für die Text-Ersetzung)."
-        SUFeedURL: "https://github.com/scubanet/tide/releases/download/appcast.xml"
-        SUPublicEDKey: "TBD-after-sparkle-key-generation"
+        SUFeedURL: "https://github.com/scubanet/tide/releases/latest/download/appcast.xml"
+        SUPublicEDKey: "cdoDIHiWb5SuO+1SwHI4MmNI5tN8dDdqTqpmfBPO3BA="
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: swiss.weckherlin.tide

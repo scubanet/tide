@@ -3,11 +3,11 @@
 Format orientiert an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/),
 Versionsschema folgt [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Aktuelle Phase: **pre-release, daily-use by author**, kein signiertes DMG-Release.
+Aktuelle Phase: **pre-release, daily-use by author**, signiertes + notarisiertes DMG via Sparkle-Auto-Update.
 
 ---
 
-## [0.2.0] — Welle 2: ElevenLabs Scribe Hybrid (28.05.2026)
+## [0.2.0] — Welle 2: ElevenLabs Scribe Hybrid + Distribution-Pipeline (28.05.2026)
 
 ### Added
 
@@ -16,6 +16,13 @@ Aktuelle Phase: **pre-release, daily-use by author**, kein signiertes DMG-Releas
 - **Settings → Voice → Spracherkennung**: 3-Optionen-Picker (Apple / ElevenLabs / Hybrid), default Hybrid
 - **AudioBufferAccumulator**: thread-safe Buffer für AVAudioPCMBuffer-Chunks, mit Resample auf 16kHz Mono Int16 + WAV-Encode
 - **Multipart-Upload-Helper** in ElevenLabsClient für Scribe-API
+- **Stop-Button für TTS** in der Top-Bar (`⌘.` Shortcut) — bricht laufende Sprachausgabe + leert die pending Sentence-Queue
+- **Distribution-Pipeline** (Welle 3): Sparkle EdDSA-Key in Info.plist, `scripts/release.sh` (archive → sign → notarize → DMG), `scripts/sign_appcast.sh`, `.github/workflows/release.yml` (auto-publish bei `git tag v*`), Runbook in `docs/RELEASE.md`
+
+### Fixed
+
+- **Crash beim Aufnahme-Stop** im ElevenLabs/Hybrid-Modus — der `bufferProvider`-Closure rief `MainActor.assumeIsolated` aus dem async Executor von `ElevenLabsRecognizer.stop()` auf und triggerte `_dispatch_assert_queue_fail`. Fix: `AudioBufferAccumulator` wird in `ChatViewModel.startRecording` vorab erzeugt und an `makeRecognizer` + `AudioRecorder` durchgereicht — die Closure capturet ihn direkt, kein `self`, kein MainActor-Hop
+- **Settings-Picker für Spracherkennung** ließ nur Hybrid markieren. `AppSettings.speechRecognizer` ist eine computed Property über `UserDefaults`, die der `@Observable`-Macro nicht trackt — SwiftUI re-renderte den Radio-Picker nie. Fix: `VoiceSection` spiegelt die Auswahl in lokalem `@State`, syncronisiert zu Settings via `onChange`
 
 ### Architektur-Entscheidungen
 

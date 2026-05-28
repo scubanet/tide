@@ -11,6 +11,16 @@ struct VoiceSection: View {
   @State private var fetchError: String?
   @State private var showRecognizerKeyMissingHint = false
 
+  /// Mirror of `settings.speechRecognizer` as a typed enum. SwiftUI tracks
+  /// this `@State` directly, so the radio group re-renders the moment the
+  /// user taps a different option — whereas `settings.speechRecognizer` is
+  /// a computed property over UserDefaults, which the `@Observable` macro
+  /// can't track (it only generates observation tracking for stored
+  /// properties). Without this mirror, only the initial value (.hybrid by
+  /// default) ever appeared selected even after the user clicked Apple
+  /// or ElevenLabs — UserDefaults was updated, but the picker didn't know.
+  @State private var recognizerChoice: SpeechRecognizerChoice = .default
+
   private var appleVoices: [AVSpeechSynthesisVoice] {
     AVSpeechSynthesisVoice.speechVoices()
       .filter { $0.language.hasPrefix("de") || $0.language.hasPrefix("en") }
@@ -95,32 +105,29 @@ struct VoiceSection: View {
       }
 
       Section {
-        // Bridge the typed enum to the String-backed AppSettings property.
-        // AppSettings stores the raw string (Core has no TideSpeech dep);
-        // the picker speaks SpeechRecognizerChoice.
-        Picker("Recognizer:", selection: Binding<SpeechRecognizerChoice>(
-          get: {
-            SpeechRecognizerChoice(rawValue: settings.speechRecognizer)
-              ?? .default
-          },
-          set: { newChoice in
-            // Key-required choice without a stored key? Snap back to
-            // Apple and surface a hint. The hint clears next time the
-            // user lands on a valid combo.
-            if newChoice.requiresElevenLabsKey, elevenLabsKey.isEmpty {
-              settings.speechRecognizer = SpeechRecognizerChoice.apple.rawValue
-              showRecognizerKeyMissingHint = true
-            } else {
-              settings.speechRecognizer = newChoice.rawValue
-              showRecognizerKeyMissingHint = false
-            }
-          }
-        )) {
+        // Picker drives `recognizerChoice` (local @State). We bridge to
+        // `settings.speechRecognizer` (UserDefaults string) via onChange.
+        // See the property comment above for why the indirection is
+        // needed.
+        Picker("Recognizer:", selection: $recognizerChoice) {
           ForEach(SpeechRecognizerChoice.allCases, id: \.self) { choice in
             Text(choice.displayName).tag(choice)
           }
         }
         .pickerStyle(.radioGroup)
+        .onChange(of: recognizerChoice) { _, newChoice in
+          // Key-required choice without a stored key? Snap back to
+          // Apple and surface a hint. The hint clears next time the
+          // user lands on a valid combo.
+          if newChoice.requiresElevenLabsKey, elevenLabsKey.isEmpty {
+            recognizerChoice = .apple
+            settings.speechRecognizer = SpeechRecognizerChoice.apple.rawValue
+            showRecognizerKeyMissingHint = true
+          } else {
+            settings.speechRecognizer = newChoice.rawValue
+            showRecognizerKeyMissingHint = false
+          }
+        }
 
         if showRecognizerKeyMissingHint {
           Text("ElevenLabs API-Key fehlt — siehe ElevenLabs-Provider oben, "
@@ -147,6 +154,9 @@ struct VoiceSection: View {
     }
     .formStyle(.grouped)
     .task {
+      // Seed the local picker-state from the persisted settings string.
+      recognizerChoice = SpeechRecognizerChoice(rawValue: settings.speechRecognizer)
+        ?? .default
       if settings.ttsProvider == "elevenLabs", !elevenLabsKey.isEmpty {
         fetchVoices()
       }

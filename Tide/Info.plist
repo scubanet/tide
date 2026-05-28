@@ -22,15 +22,15 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Tide nutzt Apple Events um mit anderen Apps zu kommunizieren (z.B. für die Text-Ersetzung).</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Tide nutzt das Mikrofon für Push-to-Talk-Eingaben an Claude.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Tide transkribiert deine Sprach-Eingaben.</string>
-	<key>NSAppleEventsUsageDescription</key>
-	<string>Tide nutzt Apple Events um mit anderen Apps zu kommunizieren (z.B. für die Text-Ersetzung).</string>
 	<key>SUFeedURL</key>
-	<string>https://github.com/dominikweckherlin/tide/releases/download/appcast.xml</string>
+	<string>https://github.com/scubanet/tide/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>TBD-after-sparkle-key-generation</string>
+	<string>cdoDIHiWb5SuO+1SwHI4MmNI5tN8dDdqTqpmfBPO3BA=</string>
 </dict>
 </plist>

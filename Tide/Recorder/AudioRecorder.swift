@@ -27,13 +27,22 @@ final class AudioRecorder {
   /// ElevenLabs / Hybrid recognizers can pull a WAV-encoded snapshot
   /// via `bufferAccumulator.exportWAV(...)` on `stop()`.
   ///
-  /// Owned by the recorder (not the recognizer) because it's the
-  /// recorder that has the tap. Recognizers reference it via a closure
-  /// captured at init-time (see `ChatViewModel.makeRecognizer`).
-  let bufferAccumulator = AudioBufferAccumulator()
+  /// Injected (not owned) so the caller can hand the *same* accumulator
+  /// to the recognizer's `bufferProvider` closure at construction time.
+  /// This sidesteps the chicken-and-egg of needing the recorder
+  /// reference inside the recognizer's closure (the previous design
+  /// captured `self.recorder` weakly and hopped to MainActor — which
+  /// crashed with `_dispatch_assert_queue_fail` because the closure
+  /// is invoked from `ElevenLabsRecognizer.stop()`, not from the main
+  /// actor).
+  let bufferAccumulator: AudioBufferAccumulator
 
-  init(recognizer: any SpeechRecognizer) {
+  init(
+    recognizer: any SpeechRecognizer,
+    bufferAccumulator: AudioBufferAccumulator = AudioBufferAccumulator()
+  ) {
     self.recognizer = recognizer
+    self.bufferAccumulator = bufferAccumulator
   }
 
   /// Live transcript stream from the underlying recognizer. UI binds to
