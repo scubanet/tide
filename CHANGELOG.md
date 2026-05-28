@@ -7,6 +7,36 @@ Aktuelle Phase: **pre-release, daily-use by author**, kein signiertes DMG-Releas
 
 ---
 
+## [0.2.0] — Welle 2: ElevenLabs Scribe Hybrid (28.05.2026)
+
+### Added
+
+- **ElevenLabs Scribe** als zweiter STT-Provider (`ElevenLabsRecognizer`)
+- **Hybrid-Modus**: Apple liefert live partial-text während des Sprechens, ElevenLabs Scribe ersetzt nach 1-3s mit höher-genauer Transkription
+- **Settings → Voice → Spracherkennung**: 3-Optionen-Picker (Apple / ElevenLabs / Hybrid), default Hybrid
+- **AudioBufferAccumulator**: thread-safe Buffer für AVAudioPCMBuffer-Chunks, mit Resample auf 16kHz Mono Int16 + WAV-Encode
+- **Multipart-Upload-Helper** in ElevenLabsClient für Scribe-API
+
+### Architektur-Entscheidungen
+
+- **Non-streaming Scribe** statt streaming-Endpoint — Batch ist robust für Push-to-Talk (sub-30s recordings)
+- **Apple-Fallback bei ElevenLabs-Fail** — Daily-Use darf nie blockieren. Bei Netz-Aus / Timeout / 5xx: leise Apple-Resultat behalten
+- **Replace-Timing atomar** im `recognizedText`-State — kein direkter Buffer-Write, schützt User-Edits
+
+### Tests
+
+- `AudioBufferAccumulatorTests` — Resample + WAV-Header-Validierung
+- `ElevenLabsClientTranscribeTests` — Mock-URL-Protocol Scribe-API-Roundtrip
+- `HybridRecognizerTests` — Apple+ElevenLabs-Coordinator + Fallback-Path
+
+### Bekannte Limits
+
+- Word-Level Timestamps explizit deaktiviert (nicht benötigt)
+- Language-Hint nicht gesetzt (Scribe auto-detected exzellent)
+- Cost-Tracking-UI nicht implementiert (~$0.40/h, in Settings später)
+
+---
+
 ## [Unreleased] — Welle 1 (28.05.2026)
 
 ### Added
