@@ -269,7 +269,13 @@ final class ChatViewModel {
       let trimmed = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
       if !trimmed.isEmpty {
         input = trimmed
-        await send()
+        // Dictation mode: when the user has disabled auto-send the
+        // transcription just lands in the input field — they can edit
+        // and submit manually. Default (true) preserves the original
+        // push-to-talk-and-send behavior.
+        if settings.autoSendAfterPushToTalk {
+          await send()
+        }
       }
     } catch {
       // Swallow — UI will just show no result.

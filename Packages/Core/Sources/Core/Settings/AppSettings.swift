@@ -24,6 +24,7 @@ public final class AppSettings {
     static let ttsProvider = "tide.ttsProvider"
     static let elevenLabsVoiceID = "tide.elevenLabsVoiceID"
     static let speechRecognizer = "tide.speechRecognizer"
+    static let autoSendAfterPushToTalk = "tide.autoSendAfterPushToTalk"
   }
 
   public var selectedModel: String {
@@ -69,5 +70,17 @@ public final class AppSettings {
   public var speechRecognizer: String {
     get { defaults.string(forKey: Key.speechRecognizer) ?? "hybrid" }
     set { defaults.set(newValue, forKey: Key.speechRecognizer) }
+  }
+
+  /// Whether `stopRecording()` should auto-send the transcribed text or
+  /// leave it in the input field for the user to edit/extend. `nil`
+  /// (first launch) collapses to `true` — that's the existing behavior,
+  /// no surprises for upgrading users.
+  ///
+  /// Set this to `false` to use Tide as a pure dictation tool: speak,
+  /// release the hotkey, edit the text, press Enter to send.
+  public var autoSendAfterPushToTalk: Bool {
+    get { defaults.object(forKey: Key.autoSendAfterPushToTalk) as? Bool ?? true }
+    set { defaults.set(newValue, forKey: Key.autoSendAfterPushToTalk) }
   }
 }

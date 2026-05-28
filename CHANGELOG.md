@@ -7,6 +7,15 @@ Aktuelle Phase: **pre-release, daily-use by author**, signiertes + notarisiertes
 
 ---
 
+## [0.2.1] — Diktiermodus (28.05.2026)
+
+### Added
+
+- **Settings → Push-to-Talk-Verhalten → "Nach Push-to-Talk automatisch senden"** — Toggle, default an. Wenn aus: transkribierter Text landet im Eingabefeld zum Editieren und manuellen Absenden via Return. Reiner Diktiermodus für längere oder zu polierende Texte
+- `AppSettings.autoSendAfterPushToTalk` als persisted Preference (UserDefaults, default `true`, kompatibel mit Bestandsnutzern)
+
+---
+
 ## [0.2.0] — Welle 2: ElevenLabs Scribe Hybrid + Distribution-Pipeline (28.05.2026)
 
 ### Added

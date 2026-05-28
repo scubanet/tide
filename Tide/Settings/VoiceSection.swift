@@ -143,6 +143,18 @@ struct VoiceSection: View {
       } header: { Text("Spracherkennung") }
 
       Section {
+        Toggle("Nach Push-to-Talk automatisch senden", isOn: Binding(
+          get: { settings.autoSendAfterPushToTalk },
+          set: { settings.autoSendAfterPushToTalk = $0 }
+        ))
+        Text("Wenn aus: Der transkribierte Text landet im Eingabefeld — "
+          + "du kannst ihn editieren und manuell mit Return senden. "
+          + "Reiner Diktiermodus.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      } header: { Text("Push-to-Talk-Verhalten") }
+
+      Section {
         Toggle("Selektion standardmäßig ersetzen", isOn: Binding(
           get: { settings.replaceSelectionByDefault },
           set: { settings.replaceSelectionByDefault = $0 }
