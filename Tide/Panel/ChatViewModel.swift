@@ -272,16 +272,25 @@ final class ChatViewModel {
     do {
       let finalText = try await recorder.stop()
       let trimmed = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
-      if !trimmed.isEmpty {
+      let duration = recorder.bufferAccumulator.duration
+      let isReject = trimmed.isEmpty
+        || TranscriptionQuality.shouldRejectRecording(duration: duration)
+        || TranscriptionQuality.isLikelyArtifact(trimmed, recordingDuration: duration)
+      if isReject {
+        // Too short / likely a hallucination — silently drop it. No
+        // input, no send, no wasted Claude call. The user just sees the
+        // empty input field (panel context, so no pill hint needed).
+        isRecording = false
+      } else {
         input = trimmed
-      }
-      isRecording = false
-      // Dictation mode: when the user has disabled auto-send the
-      // transcription just lands in the input field — they can edit
-      // and submit manually. Default (true) preserves the original
-      // push-to-talk-and-send behavior.
-      if !trimmed.isEmpty, settings.autoSendAfterPushToTalk {
-        await send()
+        isRecording = false
+        // Dictation mode: when the user has disabled auto-send the
+        // transcription just lands in the input field — they can edit
+        // and submit manually. Default (true) preserves the original
+        // push-to-talk-and-send behavior.
+        if settings.autoSendAfterPushToTalk {
+          await send()
+        }
       }
     } catch {
       // Recorder failed — drop the recording-state so the UI can

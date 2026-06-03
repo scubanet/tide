@@ -139,13 +139,17 @@ final class DictationCoordinator {
     do {
       let finalText = try await rec.stop()
       let trimmed = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
-      Self.logger.debug("final transcript (mode \(String(describing: self.currentMode), privacy: .public)): '\(trimmed, privacy: .public)'")
-      guard !trimmed.isEmpty else {
-        // Recognizer returned nothing usable — usually a sub-200ms
-        // hold or background noise. Tell the user the hotkey *did*
-        // fire so they don't think dictation is broken.
-        Self.logger.debug("empty transcript — posting too-short notification")
-        await TextInjector.notifyTranscriptTooShort()
+      let duration = rec.bufferAccumulator.duration
+      Self.logger.debug("final transcript (mode \(String(describing: self.currentMode), privacy: .public)): '\(trimmed, privacy: .public)' (\(duration, privacy: .public)s)")
+      let isReject = trimmed.isEmpty
+        || TranscriptionQuality.shouldRejectRecording(duration: duration)
+        || TranscriptionQuality.isLikelyArtifact(trimmed, recordingDuration: duration)
+      guard !isReject else {
+        // Too short / likely a hallucination. Flash a hint on the pill
+        // (it was already hidden before the await) instead of inserting
+        // garbage at the user's cursor.
+        Self.logger.debug("rejected transcript — flashing pill hint")
+        indicator?.flash("Nichts erkannt")
         return
       }
       switch self.currentMode {
@@ -177,10 +181,9 @@ final class DictationCoordinator {
     }
   }
 
-  /// Post a "polish failed, raw text inserted" user notification. Mirrors
-  /// `TextInjector.notifyTranscriptTooShort()` — lazy authorization on
-  /// first use, denial degrades silently (the raw text was already
-  /// injected, so a missing toast is not user-blocking).
+  /// Post a "polish failed, raw text inserted" user notification. Lazy
+  /// authorization on first use, denial degrades silently (the raw text
+  /// was already injected, so a missing toast is not user-blocking).
   ///
   /// `UNUserNotificationCenter.requestAuthorization` is idempotent, so
   /// calling it here as well as inside `TextInjector` is fine — the

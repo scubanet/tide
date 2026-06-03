@@ -39,6 +39,20 @@ public final class AudioBufferAccumulator: @unchecked Sendable {
     return chunks.reduce(0) { $0 + $1.frameLength }
   }
 
+  /// Total recorded time in seconds, derived from the buffered frame
+  /// count and the input format's sample rate. Returns 0 when nothing
+  /// has been buffered yet (no `inputFormat` captured). Lock-guarded —
+  /// callers may read this from the main actor after `stop()` while the
+  /// audio thread is already idle, but the lock keeps it consistent if
+  /// a stray tap is still draining.
+  public var duration: TimeInterval {
+    lock.lock()
+    defer { lock.unlock() }
+    guard let format = inputFormat, format.sampleRate > 0 else { return 0 }
+    let frames = chunks.reduce(0) { $0 + $1.frameLength }
+    return Double(frames) / format.sampleRate
+  }
+
   /// Returns a copy of the buffered chunks (for export).
   internal func snapshot() -> (format: AVAudioFormat?, chunks: [AVAudioPCMBuffer]) {
     lock.lock()

@@ -45,4 +45,12 @@ final class DictationIndicator {
     tint?.deactivate()
     pill.hide()
   }
+
+  /// Show a transient hint on the pill (e.g. after a rejected
+  /// recording). The menubar tint is untouched — by the time a reject
+  /// is known the coordinator has already called `hide()`, which
+  /// deactivated the tint.
+  func flash(_ message: String) {
+    pill.flash(message)
+  }
 }

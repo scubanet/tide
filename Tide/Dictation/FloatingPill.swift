@@ -10,6 +10,10 @@ import SwiftUI
 @Observable
 final class PillViewState {
   var partial: String = ""
+  /// When true, the pill renders a transient hint (e.g. "Nichts erkannt")
+  /// rather than live-recording state: grey dot instead of red, and the
+  /// text is shown verbatim with no "Aufnahme…" placeholder fallback.
+  var isHint: Bool = false
 }
 
 /// The small "● Aufnahme…" / live-partial overlay shown in the corner of
@@ -24,9 +28,9 @@ struct PillContents: View {
   var body: some View {
     HStack(spacing: 8) {
       Circle()
-        .fill(Color.red)
+        .fill(state.isHint ? Color.secondary : Color.red)
         .frame(width: 8, height: 8)
-      Text(state.partial.isEmpty ? "Aufnahme…" : truncated(state.partial))
+      Text(displayText)
         .font(.system(size: 12))
         .foregroundStyle(.primary)
         .lineLimit(1)
@@ -35,6 +39,11 @@ struct PillContents: View {
     .padding(.horizontal, 12)
     .padding(.vertical, 8)
     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+  }
+
+  private var displayText: String {
+    if state.isHint { return state.partial }
+    return state.partial.isEmpty ? "Aufnahme…" : truncated(state.partial)
   }
 
   private func truncated(_ s: String) -> String {
@@ -103,6 +112,7 @@ final class FloatingPill: NSPanel {
   /// screen. Resets `alphaValue` to 1.0 so a previously-faded pill is
   /// fully opaque again.
   func show(initialText: String) {
+    viewState.isHint = false
     viewState.partial = initialText
     repositionForCurrentScreen()
     self.alphaValue = 1.0
@@ -110,6 +120,26 @@ final class FloatingPill: NSPanel {
     // not active — which is the entire point: the user is dictating
     // *into another app*, Tide must not become frontmost.
     self.orderFrontRegardless()
+  }
+
+  /// Show a transient hint (e.g. "Nichts erkannt") at the configured
+  /// corner, then fade out after `duration`. Used when a dictation
+  /// session produced no usable transcript. Re-positions and re-shows
+  /// the pill even if it was already faded out by a prior `hide()`.
+  func flash(_ message: String, duration: TimeInterval = 1.2) {
+    viewState.isHint = true
+    viewState.partial = message
+    repositionForCurrentScreen()
+    self.alphaValue = 1.0
+    self.orderFrontRegardless()
+    Task { @MainActor [weak self] in
+      try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+      self?.hide()
+      // Reset hint state after the fade so the next live session starts
+      // with the red recording dot.
+      try? await Task.sleep(nanoseconds: 200_000_000)
+      self?.viewState.isHint = false
+    }
   }
 
   /// Live partial transcript update. SwiftUI re-renders via `@Observable`.
