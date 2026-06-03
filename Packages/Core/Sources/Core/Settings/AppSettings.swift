@@ -16,6 +16,29 @@ public final class AppSettings {
     self.defaults = defaults
   }
 
+  // Default transform-mode prompts. Single source of truth: the property
+  // getters fall back to these, and DictationSection's "restore default"
+  // reads the same constants. All language-agnostic ("SAME language").
+  public static let defaultPolishPrompt =
+    "You are a text editor. Fix grammar and punctuation in the user's text. "
+    + "Reply in the SAME language as the input. Keep the meaning 1:1, do not "
+    + "shorten, do not add anything, do not explain. Output ONLY the corrected text."
+  public static let defaultCalmerPrompt =
+    "You are an editor. Rewrite the user's text as a calm, factual, professional "
+    + "message. Keep the core point but remove anger, insults and venting. Reply "
+    + "in the SAME language as the input. Output ONLY the rewritten message."
+  public static let defaultEmojiPrompt =
+    "Add a few fitting emojis to the user's text to match its tone. Do not "
+    + "otherwise change the wording. Reply in the SAME language. Output ONLY the "
+    + "text with emojis."
+  public static let defaultBulletsPrompt =
+    "Convert the user's spoken thoughts into a clean bullet-point list. Keep all "
+    + "key points, add nothing. Reply in the SAME language. Output ONLY the bullet list."
+  public static let defaultProfessionalPrompt =
+    "Rewrite the user's text in a more formal, professional business tone. Keep "
+    + "the meaning, do not add or remove content. Reply in the SAME language. "
+    + "Output ONLY the rewritten text."
+
   private enum Key {
     static let selectedModel = "tide.selectedModel"
     static let voiceEnabled = "tide.voiceEnabled"
@@ -27,6 +50,10 @@ public final class AppSettings {
     static let autoSendAfterPushToTalk = "tide.autoSendAfterPushToTalk"
     static let dictationPolishPrompt = "tide.dictationPolishPrompt"
     static let dictationPillPosition = "tide.dictationPillPosition"
+    static let dictationCalmerPrompt = "tide.dictationCalmerPrompt"
+    static let dictationEmojiPrompt = "tide.dictationEmojiPrompt"
+    static let dictationBulletsPrompt = "tide.dictationBulletsPrompt"
+    static let dictationProfessionalPrompt = "tide.dictationProfessionalPrompt"
     static let customVocabulary = "tide.customVocabulary"
     static let localModelName = "tide.localModelName"
   }
@@ -95,10 +122,7 @@ public final class AppSettings {
   /// it works for DE/EN/FR inputs without per-language tuning; the
   /// model is instructed to reply in the same language as the input.
   public var dictationPolishPrompt: String {
-    get {
-      defaults.string(forKey: Key.dictationPolishPrompt)
-        ?? "You are a text editor. Fix grammar and punctuation in the user's text. Reply in the SAME language as the input. Keep the meaning 1:1, do not shorten, do not add anything, do not explain. Output ONLY the corrected text."
-    }
+    get { defaults.string(forKey: Key.dictationPolishPrompt) ?? Self.defaultPolishPrompt }
     set { defaults.set(newValue, forKey: Key.dictationPolishPrompt) }
   }
 
@@ -113,6 +137,23 @@ public final class AppSettings {
   public var dictationPillPosition: String {
     get { defaults.string(forKey: Key.dictationPillPosition) ?? "topCenter" }
     set { defaults.set(newValue, forKey: Key.dictationPillPosition) }
+  }
+
+  public var dictationCalmerPrompt: String {
+    get { defaults.string(forKey: Key.dictationCalmerPrompt) ?? Self.defaultCalmerPrompt }
+    set { defaults.set(newValue, forKey: Key.dictationCalmerPrompt) }
+  }
+  public var dictationEmojiPrompt: String {
+    get { defaults.string(forKey: Key.dictationEmojiPrompt) ?? Self.defaultEmojiPrompt }
+    set { defaults.set(newValue, forKey: Key.dictationEmojiPrompt) }
+  }
+  public var dictationBulletsPrompt: String {
+    get { defaults.string(forKey: Key.dictationBulletsPrompt) ?? Self.defaultBulletsPrompt }
+    set { defaults.set(newValue, forKey: Key.dictationBulletsPrompt) }
+  }
+  public var dictationProfessionalPrompt: String {
+    get { defaults.string(forKey: Key.dictationProfessionalPrompt) ?? Self.defaultProfessionalPrompt }
+    set { defaults.set(newValue, forKey: Key.dictationProfessionalPrompt) }
   }
 
   /// User-maintained domain terms (e.g. "PADI", "SeaExplorers") that bias

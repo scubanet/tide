@@ -127,4 +127,29 @@ final class AppSettingsTests: XCTestCase {
     let reloaded = AppSettings(defaults: defs)
     XCTAssertEqual(reloaded.localModelName, "openai_whisper-large-v3-v20240930_626MB")
   }
+
+  @MainActor
+  func testTransformPromptDefaultsNonEmpty() {
+    let s = AppSettings(defaults: UserDefaults(suiteName: "test.\(UUID().uuidString)")!)
+    XCTAssertEqual(s.dictationCalmerPrompt, AppSettings.defaultCalmerPrompt)
+    XCTAssertEqual(s.dictationEmojiPrompt, AppSettings.defaultEmojiPrompt)
+    XCTAssertEqual(s.dictationBulletsPrompt, AppSettings.defaultBulletsPrompt)
+    XCTAssertEqual(s.dictationProfessionalPrompt, AppSettings.defaultProfessionalPrompt)
+    XCTAssertFalse(AppSettings.defaultCalmerPrompt.isEmpty)
+  }
+
+  @MainActor
+  func testTransformPromptRoundTrip() {
+    let defs = UserDefaults(suiteName: "test.\(UUID().uuidString)")!
+    let s = AppSettings(defaults: defs)
+    s.dictationCalmerPrompt = "CALM X"
+    s.dictationEmojiPrompt = "EMOJI X"
+    s.dictationBulletsPrompt = "BULLET X"
+    s.dictationProfessionalPrompt = "PRO X"
+    let r = AppSettings(defaults: defs)
+    XCTAssertEqual(r.dictationCalmerPrompt, "CALM X")
+    XCTAssertEqual(r.dictationEmojiPrompt, "EMOJI X")
+    XCTAssertEqual(r.dictationBulletsPrompt, "BULLET X")
+    XCTAssertEqual(r.dictationProfessionalPrompt, "PRO X")
+  }
 }
