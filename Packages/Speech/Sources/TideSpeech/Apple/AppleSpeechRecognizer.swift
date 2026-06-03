@@ -10,17 +10,22 @@ private let log = Logger(subsystem: "swiss.weckherlin.tide", category: "speech")
 /// to `de-DE`; instantiate with another locale for English-first users.
 public final class AppleSpeechRecognizer: SpeechRecognizer, @unchecked Sendable {
   private let recognizer: SFSpeechRecognizer
+  private let contextualStrings: [String]
   private var request: SFSpeechAudioBufferRecognitionRequest?
   private var task: SFSpeechRecognitionTask?
   private var lastFinalTranscript: String = ""
   private let partialContinuation: AsyncStream<String>.Continuation
   public let partialTranscript: AsyncStream<String>
 
-  public init(locale: Locale = Locale(identifier: "de-DE")) {
+  public init(
+    locale: Locale = Locale(identifier: "de-DE"),
+    contextualStrings: [String] = []
+  ) {
     guard let recognizer = SFSpeechRecognizer(locale: locale) else {
       fatalError("SFSpeechRecognizer unavailable for locale \(locale.identifier)")
     }
     self.recognizer = recognizer
+    self.contextualStrings = contextualStrings
     var continuation: AsyncStream<String>.Continuation!
     self.partialTranscript = AsyncStream<String> { continuation = $0 }
     self.partialContinuation = continuation
@@ -38,6 +43,9 @@ public final class AppleSpeechRecognizer: SpeechRecognizer, @unchecked Sendable 
 
     let req = SFSpeechAudioBufferRecognitionRequest()
     req.shouldReportPartialResults = true
+    // Bias recognition toward user-supplied domain terms (names, jargon).
+    // Empty array is a harmless no-op.
+    req.contextualStrings = contextualStrings
     // Do NOT force on-device — forcing it can hang while the model loads
     // and silently fails on machines where the de-DE on-device model isn't
     // installed. Let Apple pick the best path (cloud-fallback or on-device).

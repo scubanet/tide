@@ -92,7 +92,8 @@ final class DictationCoordinator {
     let recognizer = RecognizerFactory.make(
       for: choice,
       apiKey: apiKey,
-      accumulator: accumulator
+      accumulator: accumulator,
+      vocabulary: settings.customVocabulary
     )
     let rec = AudioRecorder(
       recognizer: recognizer,

@@ -32,9 +32,10 @@ enum RecognizerFactory {
   static func make(
     for choice: SpeechRecognizerChoice,
     apiKey: String?,
-    accumulator: AudioBufferAccumulator
+    accumulator: AudioBufferAccumulator,
+    vocabulary: [String] = []
   ) -> any SpeechRecognizer {
-    let apple = AppleSpeechRecognizer()
+    let apple = AppleSpeechRecognizer(contextualStrings: vocabulary)
 
     guard choice != .apple, let key = apiKey, !key.isEmpty else {
       return apple
