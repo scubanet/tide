@@ -85,4 +85,30 @@ final class AppSettingsTests: XCTestCase {
     let reloaded = AppSettings(defaults: defs)
     XCTAssertEqual(reloaded.dictationPillPosition, "bottomRight")
   }
+
+  @MainActor
+  func testCustomVocabularyDefaultsEmpty() {
+    let s = AppSettings(defaults: UserDefaults(suiteName: "test.\(UUID().uuidString)")!)
+    XCTAssertEqual(s.customVocabulary, [])
+  }
+
+  @MainActor
+  func testCustomVocabularyRoundTrip() {
+    let suite = "test.\(UUID().uuidString)"
+    let defs = UserDefaults(suiteName: suite)!
+    let s = AppSettings(defaults: defs)
+    s.customVocabulary = ["PADI", "Nitrox"]
+    let reloaded = AppSettings(defaults: defs)
+    XCTAssertEqual(reloaded.customVocabulary, ["PADI", "Nitrox"])
+  }
+
+  @MainActor
+  func testCustomVocabularyTrimsAndDropsBlankLines() {
+    let suite = "test.\(UUID().uuidString)"
+    let defs = UserDefaults(suiteName: suite)!
+    // Simulate a raw multiline string with blank lines and padding.
+    defs.set("PADI\n\n  Nitrox  \n\n", forKey: "tide.customVocabulary")
+    let s = AppSettings(defaults: defs)
+    XCTAssertEqual(s.customVocabulary, ["PADI", "Nitrox"])
+  }
 }

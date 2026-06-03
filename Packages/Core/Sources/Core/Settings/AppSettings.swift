@@ -27,6 +27,7 @@ public final class AppSettings {
     static let autoSendAfterPushToTalk = "tide.autoSendAfterPushToTalk"
     static let dictationPolishPrompt = "tide.dictationPolishPrompt"
     static let dictationPillPosition = "tide.dictationPillPosition"
+    static let customVocabulary = "tide.customVocabulary"
   }
 
   public var selectedModel: String {
@@ -111,5 +112,21 @@ public final class AppSettings {
   public var dictationPillPosition: String {
     get { defaults.string(forKey: Key.dictationPillPosition) ?? "topCenter" }
     set { defaults.set(newValue, forKey: Key.dictationPillPosition) }
+  }
+
+  /// User-maintained domain terms (e.g. "PADI", "SeaExplorers") that bias
+  /// the Apple speech recognizer and are injected into the polish prompt.
+  /// Persisted as a newline-joined string; the getter normalises it into a
+  /// trimmed, blank-free list so consumers never see empty entries.
+  public var customVocabulary: [String] {
+    get {
+      (defaults.string(forKey: Key.customVocabulary) ?? "")
+        .split(separator: "\n", omittingEmptySubsequences: true)
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+        .filter { !$0.isEmpty }
+    }
+    set {
+      defaults.set(newValue.joined(separator: "\n"), forKey: Key.customVocabulary)
+    }
   }
 }
