@@ -22,6 +22,11 @@ Aktuelle Phase: **pre-release, daily-use by author**, signiertes + notarisiertes
   (`contextualStrings`) und wird im polished-Diktat an Claude weitergegeben,
   damit Jargon korrekt geschrieben wird. ElevenLabs Scribe hat keine
   Keyword-Bias-API — dort greift nur der Polish-Pfad.
+- **Lokale Transkription (WhisperKit)** — vollständig offline & gratis via
+  WhisperKit/CoreML. Neuer Recognizer „Lokal (WhisperKit, offline)", In-App
+  Modell-Download (Whisper Small / Large v3 Turbo / Large v3) im neuen
+  Settings-Tab ‚Lokal', Prewarm beim Start. Kein Audio verlässt den Mac.
+  Portiert aus Blitztext.
 
 ---
 

@@ -7,6 +7,7 @@ Native macOS Menubar-KI-Assistent. Push-to-Talk an Claude mit Text-Selektions-Ko
 - **Push-to-Talk via globalen Hotkey** — beliebige Taste festhalten (default `fn`), reden, loslassen sendet
 - **Live-Streaming-Antworten** von Claude (Anthropic API, SSE-Streaming)
 - **Streaming-TTS** via `AVSpeechSynthesizer` oder **ElevenLabs** (umschaltbar in Settings)
+- **Lokale Transkription** via WhisperKit/CoreML — offline, gratis, kein Audio verlässt den Mac (Modell-Download in Settings → Lokal)
 - **Selektion-Kontext** aus der gerade aktiven App via Accessibility API; Fallback via Clipboard-Swap für Apps ohne AX (Spark, Slack, Browser)
 - **Selektion ersetzen** — Claudes Antwort kann zurück in die selektierte Stelle gepastet werden
 - **6 Quick-Actions** (Zusammenfassen, Übersetzen, Verbessern, Antwort entwerfen, Erklären, Kürzer) + Custom-Editor
@@ -42,7 +43,7 @@ Tide/                  Xcode-App-Target (Menubar + Panel-UI, Settings)
     └── Hotkeys/       Push-to-Talk via KeyboardShortcuts-Library
 ```
 
-Geteilte Pakete sind alle local, keine externen Dependencies ausser `KeyboardShortcuts` und `Sparkle`.
+Geteilte Pakete sind alle local. Externe Dependencies: `KeyboardShortcuts`, `Sparkle` und `WhisperKit` (argmax-oss-swift, für lokale On-Device-Transkription).
 
 Details siehe [`docs/design.md`](docs/design.md).
 
