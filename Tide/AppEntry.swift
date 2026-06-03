@@ -4,6 +4,7 @@ import Core
 import Hotkeys
 import KeyboardShortcuts
 import LLM
+import TideSpeech
 
 @main
 struct TideApp: App {
@@ -49,6 +50,21 @@ final class TideAppDelegate: NSObject, NSApplicationDelegate {
         // single instance so user-tweaks in Settings propagate to both
         // flows without a restart.
         let settings = AppSettings()
+
+        // WhisperKit local transcription: build the one shared transcriber
+        // and publish it via the holder so the recognizer factory + the
+        // Local settings tab can reach it. Prewarm the model in the
+        // background if the user already runs Local — avoids a cold-start
+        // spike on the first dictation. No CoreML cost when Local is off.
+        let localStore = WhisperModelStore()
+        let transcriber = WhisperKitTranscriber(store: localStore)
+        LocalTranscriberHolder.shared.transcriber = transcriber
+        if settings.speechRecognizer == SpeechRecognizerChoice.whisperKit.rawValue,
+           localStore.isInstalled(settings.localModelName) {
+          let modelName = settings.localModelName
+          Task.detached { try? await transcriber.prewarm(modelName: modelName) }
+        }
+
         let apiKey = KeychainHelper.get(key: "anthropic.api_key") ?? ""
         let provider = AnthropicProvider(apiKey: apiKey)
 

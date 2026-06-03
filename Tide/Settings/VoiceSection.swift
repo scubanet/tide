@@ -10,6 +10,7 @@ struct VoiceSection: View {
   @State private var fetchingVoices = false
   @State private var fetchError: String?
   @State private var showRecognizerKeyMissingHint = false
+  @State private var showLocalModelMissingHint = false
 
   /// Mirror of `settings.speechRecognizer` as a typed enum. SwiftUI tracks
   /// this `@State` directly, so the radio group re-renders the moment the
@@ -116,22 +117,34 @@ struct VoiceSection: View {
         }
         .pickerStyle(.radioGroup)
         .onChange(of: recognizerChoice) { _, newChoice in
-          // Key-required choice without a stored key? Snap back to
-          // Apple and surface a hint. The hint clears next time the
-          // user lands on a valid combo.
           if newChoice.requiresElevenLabsKey, elevenLabsKey.isEmpty {
             recognizerChoice = .apple
             settings.speechRecognizer = SpeechRecognizerChoice.apple.rawValue
             showRecognizerKeyMissingHint = true
+            showLocalModelMissingHint = false
+          } else if newChoice.requiresLocalModel,
+                    !WhisperModelStore().isInstalled(settings.localModelName) {
+            recognizerChoice = .apple
+            settings.speechRecognizer = SpeechRecognizerChoice.apple.rawValue
+            showLocalModelMissingHint = true
+            showRecognizerKeyMissingHint = false
           } else {
             settings.speechRecognizer = newChoice.rawValue
             showRecognizerKeyMissingHint = false
+            showLocalModelMissingHint = false
           }
         }
 
         if showRecognizerKeyMissingHint {
           Text("ElevenLabs API-Key fehlt — siehe ElevenLabs-Provider oben, "
             + "dann erneut wählen.")
+            .font(.caption)
+            .foregroundStyle(.orange)
+        }
+
+        if showLocalModelMissingHint {
+          Text("Kein lokales Modell installiert — lade erst eines im "
+            + "‚Lokal'-Tab, dann erneut wählen.")
             .font(.caption)
             .foregroundStyle(.orange)
         }

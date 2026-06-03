@@ -230,11 +230,15 @@ final class ChatViewModel {
       ?? .default
     let apiKey = KeychainHelper.get(key: "elevenlabs.api_key")
     let accumulator = AudioBufferAccumulator()
+    let localStore = WhisperModelStore()
     let recognizer = RecognizerFactory.make(
       for: choice,
       apiKey: apiKey,
       accumulator: accumulator,
-      vocabulary: settings.customVocabulary
+      vocabulary: settings.customVocabulary,
+      localModelName: settings.localModelName,
+      localModelInstalled: localStore.isInstalled(settings.localModelName),
+      transcriber: LocalTranscriberHolder.shared.transcriber
     )
     let recorder = AudioRecorder(
       recognizer: recognizer,

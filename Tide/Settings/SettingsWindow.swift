@@ -16,6 +16,8 @@ struct SettingsWindow: View {
         .tabItem { Label("Diktat", systemImage: "mic.fill") }
       VocabularySection()
         .tabItem { Label("Vokabular", systemImage: "character.book.closed") }
+      LocalModelSection()
+        .tabItem { Label("Lokal", systemImage: "internaldrive") }
       QuickActionsEditor()
         .tabItem { Label("Actions", systemImage: "bolt") }
     }

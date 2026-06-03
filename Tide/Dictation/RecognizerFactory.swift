@@ -29,13 +29,35 @@ enum RecognizerFactory {
   ///   - apiKey: ElevenLabs API key (nil/empty → falls back to Apple)
   ///   - accumulator: shared PCM buffer collector; must be the same
   ///     instance the AudioRecorder taps into
+  ///   - vocabulary: contextual strings for Apple on-device recognition
+  ///   - localModelName: name of the WhisperKit model to use
+  ///   - localModelInstalled: whether the model has been downloaded
+  ///   - transcriber: shared `LocalTranscriberHolder` transcriber, if ready
   static func make(
     for choice: SpeechRecognizerChoice,
     apiKey: String?,
     accumulator: AudioBufferAccumulator,
-    vocabulary: [String] = []
+    vocabulary: [String] = [],
+    localModelName: String = "",
+    localModelInstalled: Bool = false,
+    transcriber: (any Transcribing)? = nil
   ) -> any SpeechRecognizer {
     let apple = AppleSpeechRecognizer(contextualStrings: vocabulary)
+
+    // Local WhisperKit: only when a model is installed AND the shared
+    // transcriber exists. Otherwise fall back to Apple (logged), so a
+    // user who picked Local but hasn't downloaded a model still dictates.
+    if choice == .whisperKit {
+      if localModelInstalled, let transcriber {
+        return WhisperKitRecognizer(
+          transcriber: transcriber,
+          modelName: localModelName,
+          bufferProvider: { accumulator.exportWAV(sampleRate: 16000, channels: 1) },
+          language: nil
+        )
+      }
+      return apple
+    }
 
     guard choice != .apple, let key = apiKey, !key.isEmpty else {
       return apple
@@ -45,8 +67,6 @@ enum RecognizerFactory {
     let elevenRecognizer = ElevenLabsRecognizer(
       client: client,
       bufferProvider: {
-        // Pure value-capture of the accumulator (Sendable).
-        // No `self`, no MainActor — safe from any executor.
         accumulator.exportWAV(sampleRate: 16000, channels: 1)
       }
     )
@@ -56,9 +76,7 @@ enum RecognizerFactory {
       return elevenRecognizer
     case .hybrid:
       return HybridRecognizer(apple: apple, eleven: elevenRecognizer)
-    case .apple:
-      // Unreachable per the guard above, but the switch needs to be
-      // exhaustive over the enum.
+    case .apple, .whisperKit:
       return apple
     }
   }
