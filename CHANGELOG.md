@@ -27,6 +27,12 @@ Aktuelle Phase: **pre-release, daily-use by author**, signiertes + notarisiertes
   Modell-Download (Whisper Small / Large v3 Turbo / Large v3) im neuen
   Settings-Tab ‚Lokal', Prewarm beim Start. Kein Audio verlässt den Mac.
   Portiert aus Blitztext.
+- **Diktat-Transform-Modi** — vier neue Standalone-Diktat-Modi neben Roh/Polished:
+  **Calmer** (Wut → ruhige Nachricht), **Emoji**, **Bullets** (Stichpunkte),
+  **Professional** (formeller Ton). Jeder ein eigener opt-in Hotkey
+  (Settings → Hotkey) mit editierbarem Prompt (Settings → Diktat, Modus-Picker).
+  Laufen über denselben Claude-Pfad wie Polished. Inspiriert von Blitztexts
+  Workflow-Personalities.
 
 ---
 
