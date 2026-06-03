@@ -17,6 +17,11 @@ Aktuelle Phase: **pre-release, daily-use by author**, signiertes + notarisiertes
   Pille-Hinweis „Nichts erkannt", der Chat verwirft still. Reine Logik in
   `TranscriptionQuality` (TideSpeech), gespeist von neuer
   `AudioBufferAccumulator.duration`. Portiert aus Blitztext.
+- **Custom-Vokabular** — pflegbare Begriffsliste (Settings→Vokabular) für
+  Namen/Fachjargon (PADI, SeaExplorers, …). Biast die Apple-Erkennung
+  (`contextualStrings`) und wird im polished-Diktat an Claude weitergegeben,
+  damit Jargon korrekt geschrieben wird. ElevenLabs Scribe hat keine
+  Keyword-Bias-API — dort greift nur der Polish-Pfad.
 
 ---
 
