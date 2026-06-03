@@ -181,10 +181,9 @@ final class DictationCoordinator {
     }
   }
 
-  /// Post a "polish failed, raw text inserted" user notification. Mirrors
-  /// `TextInjector.notifyTranscriptTooShort()` — lazy authorization on
-  /// first use, denial degrades silently (the raw text was already
-  /// injected, so a missing toast is not user-blocking).
+  /// Post a "polish failed, raw text inserted" user notification. Lazy
+  /// authorization on first use, denial degrades silently (the raw text
+  /// was already injected, so a missing toast is not user-blocking).
   ///
   /// `UNUserNotificationCenter.requestAuthorization` is idempotent, so
   /// calling it here as well as inside `TextInjector` is fine — the

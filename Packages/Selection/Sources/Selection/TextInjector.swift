@@ -195,30 +195,4 @@ public enum TextInjector {
       log.warning("posting pasteboard notification failed: \(error.localizedDescription, privacy: .public)")
     }
   }
-
-  /// Post a "transcript too short" user notification. Called by the
-  /// dictation coordinator when the recognizer returned nothing.
-  @MainActor
-  public static func notifyTranscriptTooShort() async {
-    guard _notificationsEnabled else { return }
-    let center = UNUserNotificationCenter.current()
-    let granted = (try? await center.requestAuthorization(options: [.alert])) ?? false
-    guard granted else {
-      log.warning("notification permission denied — too-short notice skipped")
-      return
-    }
-    let content = UNMutableNotificationContent()
-    content.title = "Tide — Diktat"
-    content.body = "Zu kurz aufgenommen — nichts zu diktieren"
-    let request = UNNotificationRequest(
-      identifier: "tide.dictation.tooshort.\(UUID().uuidString)",
-      content: content,
-      trigger: nil
-    )
-    do {
-      try await center.add(request)
-    } catch {
-      log.warning("posting too-short notification failed: \(error.localizedDescription, privacy: .public)")
-    }
-  }
 }
