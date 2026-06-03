@@ -28,6 +28,7 @@ struct LocalModelSection: View {
               .tag(model.id)
           }
         }
+        .disabled(downloading)
         .onChange(of: selectedModel) { _, newValue in
           settings.localModelName = newValue
           prewarmIfInstalled(newValue)
@@ -68,8 +69,7 @@ struct LocalModelSection: View {
 
   private func prewarmIfInstalled(_ id: String) {
     guard store.isInstalled(id),
-          let transcriber = LocalTranscriberHolder.shared.transcriber
-            as? WhisperKitTranscriber else { return }
+          let transcriber = LocalTranscriberHolder.shared.transcriber else { return }
     Task.detached { try? await transcriber.prewarm(modelName: id) }
   }
 

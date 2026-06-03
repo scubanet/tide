@@ -8,6 +8,9 @@ private let log = Logger(subsystem: "swiss.weckherlin.tide", category: "whisper-
 /// can be unit-tested with a mock.
 public protocol Transcribing: Sendable {
   func transcribe(wav: Data, language: String?, modelName: String) async throws -> String
+  /// Load (and cache) the model so the first transcription has no
+  /// cold-start spike. A non-warming engine (or a mock) can no-op.
+  func prewarm(modelName: String) async throws
 }
 
 /// One shared actor instance (built in AppEntry, reached via

@@ -13,6 +13,7 @@ private actor MockTranscriber: Transcribing {
     case .throws_: throw WhisperModelError.modelMissing(modelName)
     }
   }
+  func prewarm(modelName: String) async throws {}
   func calls() -> Int { callCount }
 }
 
