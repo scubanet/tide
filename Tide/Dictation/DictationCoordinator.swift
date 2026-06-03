@@ -21,17 +21,6 @@ enum DictationMode: String, CaseIterable, Sendable {
 
   var isRaw: Bool { self == .raw }
 
-  var displayName: String {
-    switch self {
-    case .raw:          "Roh"
-    case .polished:     "Polished"
-    case .calmer:       "Calmer (Dampf ablassen)"
-    case .emoji:        "Emoji"
-    case .bullets:      "Bullets"
-    case .professional: "Professional"
-    }
-  }
-
   /// The editable base prompt for this transform mode, or `nil` for `.raw`.
   @MainActor
   func basePrompt(from settings: AppSettings) -> String? {

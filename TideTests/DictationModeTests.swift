@@ -9,6 +9,18 @@ final class DictationModeTests: XCTestCase {
     XCTAssertEqual(all, [.raw, .polished, .calmer, .emoji, .bullets, .professional])
   }
 
+  /// The settings editor (`DictationSection.PromptMode`) must cover every
+  /// transform mode — i.e. all DictationMode cases except `.raw`. If a new
+  /// transform mode is added to DictationMode but not PromptMode it would be
+  /// silently un-editable; this invariant turns that into a build failure.
+  @MainActor
+  func test_promptModeCoversAllTransformModes() {
+    XCTAssertEqual(
+      DictationSection.PromptMode.allCases.count + 1,
+      DictationMode.allCases.count
+    )
+  }
+
   @MainActor
   func test_isRaw_onlyForRaw() {
     XCTAssertTrue(DictationMode.raw.isRaw)
