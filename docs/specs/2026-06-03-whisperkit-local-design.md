@@ -77,24 +77,28 @@ public protocol Transcribing: Sendable {
 }
 ```
 
-`WhisperKitTranscriber: Transcribing` — lädt die `WhisperKit`-Pipeline über
-einen **prozess-weiten, actor-isolierten Cache, gekeyed pro Modell-Name**.
-Dadurch teilen sich Prewarm-Instanz und Diktat-Instanz dieselbe geladene
-Pipeline — Prewarm wirkt auch wenn die Factory pro Sitzung einen frischen
-Transcriber baut. (Ohne den geteilten Cache würde jede Instanz neu laden und
-Prewarm liefe ins Leere.)
-- `init(store: WhisperModelStore, modelName: String)`.
-- `prewarm() async throws` — lädt/cached die Pipeline (für App-Start/Tab-Vorwärmen).
-- `transcribe(wav:language:)` — schreibt `wav` in eine Temp-`.wav`, ruft
-  `pipeline.transcribe(audioPath:decodeOptions:)` mit
-  `DecodingOptions(task: .transcribe, language: language)` (language `nil` =
+`WhisperKitTranscriber: Transcribing` — **ein actor, eine geteilte Instanz**
+(in `AppEntry` gebaut, an die Call-Sites durchgereicht). Hält die geladene
+`WhisperKit`-Pipeline actor-isoliert (`loadedModelName` + Pipeline), lädt neu
+wenn ein anderer Modell-Name angefragt wird. Weil es **eine** Instanz ist,
+wirkt Prewarm auch fürs spätere Diktat — die Pipeline verlässt nie ihren Actor
+(wichtig unter Swift-6-strict-concurrency: `WhisperKit` ist non-Sendable, darf
+nicht über Actor-Grenzen gereicht werden — ein prozess-weiter Cache-Actor wäre
+hier unsauber).
+- `init(store: WhisperModelStore)`.
+- `prewarm(modelName:) async throws` — lädt/cached die Pipeline.
+- `transcribe(wav:language:modelName:)` — schreibt `wav` in eine Temp-`.wav`,
+  lädt/cached die Pipeline für `modelName`, ruft `pipeline.transcribe(audioPath:decodeOptions:)`
+  mit `DecodingOptions(task: .transcribe, language: language)` (language `nil` =
   Auto-Detect), joined + trimmt das Ergebnis, löscht die Temp-Datei (defer).
   Wirft `WhisperModelError.modelMissing` wenn das Modell nicht installiert ist.
+
+`Transcribing`-Protokoll-Signatur: `func transcribe(wav: Data, language: String?, modelName: String) async throws -> String`.
 
 ### 3. `WhisperKitRecognizer` (`SpeechRecognizer`)
 
 Non-streaming, spiegelt `ElevenLabsRecognizer`:
-- `init(transcriber: any Transcribing, bufferProvider: @escaping @Sendable () -> Data?, language: String?)`.
+- `init(transcriber: any Transcribing, modelName: String, bufferProvider: @escaping @Sendable () -> Data?, language: String?)`.
 - `start()`/`feed(_:)` = no-op (Buffer kommt app-seitig via `AudioBufferAccumulator`).
 - `partialTranscript` = sofort-leerer Stream (keine Live-Partials).
 - `stop()` — `bufferProvider()` → nil ⇒ `""`; sonst `transcriber.transcribe(wav:language:)`.
@@ -113,25 +117,38 @@ Non-streaming, spiegelt `ElevenLabsRecognizer`:
 - `localModelName: String` — default `"openai_whisper-small_216MB"`. UserDefaults-Key `tide.localModelName`.
 
 ### `RecognizerFactory`
-Neuer Parameter `localModelName: String` (default `""`). Die Factory baut bei
-`.whisperKit` selbst `WhisperModelStore` + `WhisperKitTranscriber(modelName:)`
-(der geteilte Pipeline-Cache sorgt für Prewarm-Reuse). Installiert-Check via
-`store.isInstalled(localModelName)` (synchroner File-Existenz-Check — Factory
-bleibt synchron). Branch:
-- `.whisperKit` UND Modell installiert → `WhisperKitRecognizer`.
-- `.whisperKit` ohne Modell → **Apple-Fallback** (geloggt), Vokabular geht an Apple.
+Neue Parameter `localModelName: String` (default `""`) + `transcriber: (any Transcribing)?`
+(default `nil` — hält die geteilte Instanz; Tests/Apple-Pfade brauchen sie nicht).
+Plus `localModelInstalled: Bool` (synchroner Check, vom Call-Site via
+`WhisperModelStore().isInstalled(localModelName)` ermittelt — hält die Factory
+synchron + testbar). Branch:
+- `.whisperKit` UND `localModelInstalled` UND `transcriber != nil` →
+  `WhisperKitRecognizer(transcriber:, modelName: localModelName, bufferProvider:, language: nil)`.
+- `.whisperKit` sonst → **Apple-Fallback** (geloggt), Vokabular geht an Apple.
 - Bestehende Branches (apple/elevenLabs/hybrid) unverändert.
 
 Die Call-Sites (`DictationCoordinator.start`, `ChatViewModel.startRecording`)
-übergeben `settings.localModelName`; sonst unverändert.
+halten die geteilte `WhisperKitTranscriber`-Instanz (via Init durchgereicht aus
+`AppEntry`) und übergeben sie + `settings.localModelName` + den
+`store.isInstalled(...)`-Bool an die Factory.
 
 ### Prewarm
-- **App-Start** (`AppEntry`/Composition): wenn `speechRecognizer == .whisperKit`
-  UND `localModelName` installiert → `Task { try? await transcriber.prewarm() }`.
+- **App-Start** (`AppEntry`): die eine `WhisperKitTranscriber`-Instanz wird hier
+  gebaut. Wenn `speechRecognizer == .whisperKit` UND `localModelName` installiert
+  → `Task { try? await transcriber.prewarm(modelName: settings.localModelName) }`.
   Lädt CoreML im Hintergrund, damit das erste Diktat keinen 1-3s-Spike hat.
   Wird nicht geladen, wenn Local nicht aktiv (kein CoreML-Overhead für Nicht-Nutzer).
-- **Tab-/Modell-Wechsel**: `LocalModelSection` triggert `prewarm()` für das
-  gewählte (installierte) Modell beim Erscheinen + nach Modell-Wechsel.
+- **Tab-/Modell-Wechsel**: `LocalModelSection` triggert `prewarm(modelName:)` für
+  das gewählte (installierte) Modell beim Erscheinen + nach Modell-Wechsel.
+  (Braucht Zugriff auf die geteilte Instanz — siehe „Wiring der geteilten Instanz".)
+
+### Wiring der geteilten Transcriber-Instanz
+`AppEntry` baut `let transcriber = WhisperKitTranscriber(store: WhisperModelStore())`
+und reicht sie an `MenubarController` (→ `ChatViewModel`) und `DictationCoordinator`.
+`LocalModelSection` (ein Settings-View ohne direkten DI-Pfad) erhält die Instanz
+über einen schmalen `@MainActor`-Holder (z.B. `LocalTranscriberHolder.shared`,
+in `AppEntry` gesetzt) — Settings-Views werden von SwiftUI ohne Konstruktor-DI
+erzeugt, daher der Holder. Implementierungsdetail im Plan.
 
 ### UI — neuer Tab „Lokal" (`LocalModelSection.swift`)
 - Picker über die 3 Katalog-Modelle, je mit Installiert-Badge + Grössenangabe,
