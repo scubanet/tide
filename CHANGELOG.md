@@ -7,6 +7,19 @@ Aktuelle Phase: **pre-release, daily-use by author**, signiertes + notarisiertes
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Artefakt-Filter** — zu kurze Aufnahmen (< 0.3s) und ASR-Halluzinationen
+  (viel Text bei kurzer Aufnahme) werden verworfen, bevor sie am Cursor
+  (Diktat) oder als Chat-Bubble (PTT) landen. Diktat zeigt einen kurzen
+  Pille-Hinweis „Nichts erkannt", der Chat verwirft still. Reine Logik in
+  `TranscriptionQuality` (TideSpeech), gespeist von neuer
+  `AudioBufferAccumulator.duration`. Portiert aus Blitztext.
+
+---
+
 ## [0.3.0] — Welle 4: Standalone Dictation (28.05.2026)
 
 SuperWhisper / WisprFlow-Style: Hotkey halten, sprechen, loslassen — der transkribierte Text landet **direkt am Cursor in der gerade fokussierten App**, ohne dass Tide's eigenes Panel aufgeht. Zwei neue Hotkeys, beide opt-in (kein Default).
