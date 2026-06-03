@@ -11,8 +11,14 @@ let package = Package(
   products: [
     .library(name: "TideSpeech", targets: ["TideSpeech"]),
   ],
+  dependencies: [
+    .package(url: "https://github.com/argmaxinc/argmax-oss-swift.git", exact: "0.18.0"),
+  ],
   targets: [
-    .target(name: "TideSpeech"),
+    .target(
+      name: "TideSpeech",
+      dependencies: [.product(name: "WhisperKit", package: "argmax-oss-swift")]
+    ),
     .testTarget(name: "TideSpeechTests", dependencies: ["TideSpeech"]),
   ]
 )
