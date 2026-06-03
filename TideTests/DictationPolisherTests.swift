@@ -219,6 +219,37 @@ final class DictationPolisherTests: XCTestCase {
       XCTFail("expected provider error, got \(error)")
     }
   }
+
+  // MARK: - Custom vocabulary injection
+
+  func test_polish_appendsVocabularyToSystemPrompt() async throws {
+    settings.dictationPolishPrompt = "BASE PROMPT"
+    settings.customVocabulary = ["PADI", "SeaExplorers"]
+    let stub = StubProvider(chunks: ["ok"])
+    let polisher = DictationPolisher(
+      provider: stub,
+      settings: settings,
+      timeoutSeconds: 2
+    )
+    _ = try await polisher.polish("raw")
+    let prompt = try XCTUnwrap(stub.lastSystemPrompt)
+    XCTAssertTrue(prompt.hasPrefix("BASE PROMPT"))
+    XCTAssertTrue(prompt.contains("PADI"))
+    XCTAssertTrue(prompt.contains("SeaExplorers"))
+  }
+
+  func test_polish_leavesSystemPromptUnchanged_whenNoVocabulary() async throws {
+    settings.dictationPolishPrompt = "BASE PROMPT"
+    // customVocabulary defaults to empty.
+    let stub = StubProvider(chunks: ["ok"])
+    let polisher = DictationPolisher(
+      provider: stub,
+      settings: settings,
+      timeoutSeconds: 2
+    )
+    _ = try await polisher.polish("raw")
+    XCTAssertEqual(stub.lastSystemPrompt, "BASE PROMPT")
+  }
 }
 
 // MARK: - Stub LLMProvider

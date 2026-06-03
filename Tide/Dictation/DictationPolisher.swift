@@ -77,7 +77,10 @@ final class DictationPolisher {
       throw PolishError.missingAPIKey
     }
 
-    let systemPrompt = settings.dictationPolishPrompt
+    let systemPrompt = Self.systemPrompt(
+      base: settings.dictationPolishPrompt,
+      vocabulary: settings.customVocabulary
+    )
     let userMessage = LLMMessage(role: .user, content: raw)
     let model = settings.selectedModel
     // Capture the timeout into a `Sendable` local so the timeout-task
@@ -131,5 +134,16 @@ final class DictationPolisher {
       "polished \(raw.count, privacy: .public) → \(trimmed.count, privacy: .public) chars"
     )
     return trimmed
+  }
+
+  /// Build the polish system prompt. When the user has domain terms,
+  /// append a single instruction line so Claude spells jargon correctly;
+  /// an empty vocabulary returns `base` unchanged.
+  static func systemPrompt(base: String, vocabulary: [String]) -> String {
+    guard !vocabulary.isEmpty else { return base }
+    let terms = vocabulary.joined(separator: ", ")
+    return base
+      + "\n\nDomain terms that may appear in the text — spell them exactly "
+      + "as written, correcting any phonetic mis-transcription: \(terms)"
   }
 }
