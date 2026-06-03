@@ -111,4 +111,20 @@ final class AppSettingsTests: XCTestCase {
     let s = AppSettings(defaults: defs)
     XCTAssertEqual(s.customVocabulary, ["PADI", "Nitrox"])
   }
+
+  @MainActor
+  func testLocalModelNameDefaultsToSmall() {
+    let s = AppSettings(defaults: UserDefaults(suiteName: "test.\(UUID().uuidString)")!)
+    XCTAssertEqual(s.localModelName, "openai_whisper-small_216MB")
+  }
+
+  @MainActor
+  func testLocalModelNameRoundTrip() {
+    let suite = "test.\(UUID().uuidString)"
+    let defs = UserDefaults(suiteName: suite)!
+    let s = AppSettings(defaults: defs)
+    s.localModelName = "openai_whisper-large-v3-v20240930_626MB"
+    let reloaded = AppSettings(defaults: defs)
+    XCTAssertEqual(reloaded.localModelName, "openai_whisper-large-v3-v20240930_626MB")
+  }
 }

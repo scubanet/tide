@@ -28,6 +28,7 @@ public final class AppSettings {
     static let dictationPolishPrompt = "tide.dictationPolishPrompt"
     static let dictationPillPosition = "tide.dictationPillPosition"
     static let customVocabulary = "tide.customVocabulary"
+    static let localModelName = "tide.localModelName"
   }
 
   public var selectedModel: String {
@@ -128,5 +129,12 @@ public final class AppSettings {
     set {
       defaults.set(newValue.joined(separator: "\n"), forKey: Key.customVocabulary)
     }
+  }
+
+  /// Which WhisperKit model the local recognizer uses. Stored as the
+  /// model's catalog id. Default: Whisper Small (fastest, 216 MB).
+  public var localModelName: String {
+    get { defaults.string(forKey: Key.localModelName) ?? "openai_whisper-small_216MB" }
+    set { defaults.set(newValue, forKey: Key.localModelName) }
   }
 }
