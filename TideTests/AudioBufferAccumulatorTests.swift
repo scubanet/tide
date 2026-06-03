@@ -46,4 +46,23 @@ final class AudioBufferAccumulatorTests: XCTestCase {
     acc.reset()
     XCTAssertEqual(acc.frameCount, 0)
   }
+
+  func test_duration_isZero_whenEmpty() {
+    let acc = AudioBufferAccumulator()
+    XCTAssertEqual(acc.duration, 0, accuracy: 0.0001)
+  }
+
+  func test_duration_matchesBufferedFrames() {
+    let acc = AudioBufferAccumulator()
+    // 500ms at 44100 Hz
+    acc.append(makeSineBuffer(sampleRate: 44100, durationMs: 500))
+    XCTAssertEqual(acc.duration, 0.5, accuracy: 0.01)
+  }
+
+  func test_duration_isZero_afterReset() {
+    let acc = AudioBufferAccumulator()
+    acc.append(makeSineBuffer(sampleRate: 44100, durationMs: 300))
+    acc.reset()
+    XCTAssertEqual(acc.duration, 0, accuracy: 0.0001)
+  }
 }
