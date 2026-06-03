@@ -70,9 +70,9 @@ final class AppSettingsTests: XCTestCase {
   }
 
   @MainActor
-  func testDictationPillPositionDefaultsToTopRight() {
+  func testDictationPillPositionDefaultsToTopCenter() {
     let s = AppSettings(defaults: UserDefaults(suiteName: "test.\(UUID().uuidString)")!)
-    XCTAssertEqual(s.dictationPillPosition, "topRight")
+    XCTAssertEqual(s.dictationPillPosition, "topCenter")
   }
 
   @MainActor
