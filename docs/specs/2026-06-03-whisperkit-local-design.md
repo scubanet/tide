@@ -128,9 +128,12 @@ synchron + testbar). Branch:
 - Bestehende Branches (apple/elevenLabs/hybrid) unverändert.
 
 Die Call-Sites (`DictationCoordinator.start`, `ChatViewModel.startRecording`)
-halten die geteilte `WhisperKitTranscriber`-Instanz (via Init durchgereicht aus
-`AppEntry`) und übergeben sie + `settings.localModelName` + den
-`store.isInstalled(...)`-Bool an die Factory.
+lesen die geteilte Instanz aus `LocalTranscriberHolder.shared.transcriber` und
+übergeben sie + `settings.localModelName` + den `store.isInstalled(...)`-Bool an
+die Factory. **Kein Init-Threading** durch MenubarController/ChatViewModel/
+Coordinator — der `@MainActor`-Holder ist der einzige Zugriffspunkt (von AppEntry
+einmalig gesetzt), was die Wiring-Änderung minimal hält und denselben Pfad für
+die nicht-DI-fähigen SwiftUI-Settings-Views nutzt.
 
 ### Prewarm
 - **App-Start** (`AppEntry`): die eine `WhisperKitTranscriber`-Instanz wird hier
@@ -142,13 +145,14 @@ halten die geteilte `WhisperKitTranscriber`-Instanz (via Init durchgereicht aus
   das gewählte (installierte) Modell beim Erscheinen + nach Modell-Wechsel.
   (Braucht Zugriff auf die geteilte Instanz — siehe „Wiring der geteilten Instanz".)
 
-### Wiring der geteilten Transcriber-Instanz
-`AppEntry` baut `let transcriber = WhisperKitTranscriber(store: WhisperModelStore())`
-und reicht sie an `MenubarController` (→ `ChatViewModel`) und `DictationCoordinator`.
-`LocalModelSection` (ein Settings-View ohne direkten DI-Pfad) erhält die Instanz
-über einen schmalen `@MainActor`-Holder (z.B. `LocalTranscriberHolder.shared`,
-in `AppEntry` gesetzt) — Settings-Views werden von SwiftUI ohne Konstruktor-DI
-erzeugt, daher der Holder. Implementierungsdetail im Plan.
+### Wiring der geteilten Transcriber-Instanz — `LocalTranscriberHolder`
+`@MainActor final class LocalTranscriberHolder { static let shared = …; var
+transcriber: (any Transcribing)? }` (in `TideSpeech`). `AppEntry` setzt beim Start
+`LocalTranscriberHolder.shared.transcriber = WhisperKitTranscriber(store: WhisperModelStore())`.
+Alle Konsumenten (RecognizerFactory-Call-Sites, `LocalModelSection`-Prewarm) lesen
+daraus. Kein Init-Threading durch bestehende Typen. Der Holder ist der bewusste
+Kompromiss, weil SwiftUI-Settings-Views nicht über Konstruktoren injiziert werden
+können und die Factory ein statisches `enum` ist.
 
 ### UI — neuer Tab „Lokal" (`LocalModelSection.swift`)
 - Picker über die 3 Katalog-Modelle, je mit Installiert-Badge + Grössenangabe,
@@ -214,16 +218,17 @@ schreibt Temp-WAV → `WhisperKit.transcribe(audioPath:)` → Text →
 | `Packages/Speech/Sources/TideSpeech/WhisperKit/WhisperModelStore.swift` | **neu** |
 | `Packages/Speech/Sources/TideSpeech/WhisperKit/WhisperKitTranscriber.swift` | **neu** (+ `Transcribing`) |
 | `Packages/Speech/Sources/TideSpeech/WhisperKit/WhisperKitRecognizer.swift` | **neu** |
+| `Packages/Speech/Sources/TideSpeech/WhisperKit/LocalTranscriberHolder.swift` | **neu** — `@MainActor`-Holder der geteilten Instanz |
 | `Packages/Speech/Sources/TideSpeech/Protocols/SpeechRecognizer.swift` | `.whisperKit` Case + Flag |
 | `Packages/Speech/Tests/TideSpeechTests/WhisperModelStoreTests.swift` | **neu** |
 | `Packages/Speech/Tests/TideSpeechTests/WhisperKitRecognizerTests.swift` | **neu** |
 | `Packages/Speech/Tests/TideSpeechTests/SpeechRecognizerChoiceTests.swift` | **neu/erweitert** |
 | `Packages/Core/Sources/Core/Settings/AppSettings.swift` | `localModelName` |
 | `Packages/Core/Tests/CoreTests/AppSettingsTests.swift` | localModelName-Test |
-| `Tide/Dictation/RecognizerFactory.swift` | `.whisperKit`-Branch + Fallback |
-| `Tide/Dictation/DictationCoordinator.swift` | `localModelName` an Factory |
-| `Tide/Panel/ChatViewModel.swift` | `localModelName` an Factory |
-| `Tide/AppEntry.swift` | Prewarm-Hook beim App-Start (wenn `.whisperKit` aktiv + Modell installiert) |
+| `Tide/Dictation/RecognizerFactory.swift` | `.whisperKit`-Branch + neue Params + Fallback |
+| `Tide/Dictation/DictationCoordinator.swift` | liest Holder + `localModelName`/`isInstalled` → Factory |
+| `Tide/Panel/ChatViewModel.swift` | liest Holder + `localModelName`/`isInstalled` → Factory |
+| `Tide/AppEntry.swift` | Holder setzen + Prewarm-Hook beim Start (wenn `.whisperKit` aktiv + Modell installiert) |
 | `Tide/Settings/LocalModelSection.swift` | **neu** — Download/Picker-Tab |
 | `Tide/Settings/VoiceSection.swift` | `.whisperKit`-No-Model-Hinweis |
 | `Tide/Settings/SettingsWindow.swift` | Tab einhängen |
