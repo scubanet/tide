@@ -78,9 +78,12 @@ final class MenubarController {
       NSApp.activate(ignoringOtherApps: true)
       return
     }
+    // Match the SettingsWindow content's ideal size (sidebar + detail) so the
+    // window opens correctly sized and `center()` lands it true. `.resizable`
+    // lets the NavigationSplitView columns breathe.
     let window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 520, height: 380),
-      styleMask: [.titled, .closable, .miniaturizable],
+      contentRect: NSRect(x: 0, y: 0, width: 640, height: 470),
+      styleMask: [.titled, .closable, .miniaturizable, .resizable],
       backing: .buffered,
       defer: false
     )

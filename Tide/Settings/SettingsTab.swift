@@ -24,7 +24,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
     case .local:      "Lokal"
     case .hotkey:     "Hotkey"
     case .dictation:  "Diktat"
-    case .actions:    "Actions"
+    case .actions:    "Aktionen"
     }
   }
 
