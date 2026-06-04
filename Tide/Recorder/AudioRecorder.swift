@@ -57,9 +57,9 @@ final class AudioRecorder {
     // Drop any audio left from a previous session so the next
     // ElevenLabs/Hybrid exportWAV only sees this session's audio.
     bufferAccumulator.reset()
-    try await recognizer.start()
-    log.debug("AudioRecorder.start: recognizer ready")
 
+    // Validate the input format BEFORE starting the recognizer, so a bad
+    // format doesn't leak a started recognizer.
     let input = engine.inputNode
     let format = input.outputFormat(forBus: 0)
     log.debug("AudioRecorder.start: input format sampleRate=\(format.sampleRate) channels=\(format.channelCount)")
@@ -69,28 +69,39 @@ final class AudioRecorder {
         userInfo: [NSLocalizedDescriptionKey: "Audio input not available (0 sample rate). Check mic permission."])
     }
 
-    let capturedRecognizer = recognizer
-    let capturedAccumulator = bufferAccumulator
-    // The tap closure MUST be explicitly `@Sendable` to break the MainActor
-    // inheritance from this method's enclosing context. Without it Swift
-    // treats the closure as MainActor-isolated, and the audio render thread
-    // (which is NOT a Swift task / cooperative-thread) fails the runtime
-    // executor check with `_dispatch_assert_queue_fail` the first time a
-    // buffer arrives. The closure body only touches Sendable references
-    // (the recognizer and the lock-guarded accumulator), so it's safe to
-    // run on the audio render thread.
-    let block: @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void = { [capturedRecognizer, capturedAccumulator] buffer, _ in
-      capturedAccumulator.append(buffer)
-      capturedRecognizer.feed(buffer)
-    }
-    input.installTap(onBus: 0, bufferSize: 1024, format: format, block: block)
-    log.debug("AudioRecorder.start: tap installed")
+    try await recognizer.start()
+    log.debug("AudioRecorder.start: recognizer ready")
 
-    engine.prepare()
-    log.debug("AudioRecorder.start: engine prepared")
-    try engine.start()
-    log.debug("AudioRecorder.start: engine running")
-    isRunning = true
+    do {
+      let capturedRecognizer = recognizer
+      let capturedAccumulator = bufferAccumulator
+      // The tap closure MUST be explicitly `@Sendable` to break the MainActor
+      // inheritance from this method's enclosing context. Without it Swift
+      // treats the closure as MainActor-isolated, and the audio render thread
+      // (which is NOT a Swift task / cooperative-thread) fails the runtime
+      // executor check with `_dispatch_assert_queue_fail` the first time a
+      // buffer arrives. The closure body only touches Sendable references
+      // (the recognizer and the lock-guarded accumulator), so it's safe to
+      // run on the audio render thread.
+      let block: @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void = { [capturedRecognizer, capturedAccumulator] buffer, _ in
+        capturedAccumulator.append(buffer)
+        capturedRecognizer.feed(buffer)
+      }
+      input.installTap(onBus: 0, bufferSize: 1024, format: format, block: block)
+      log.debug("AudioRecorder.start: tap installed")
+
+      engine.prepare()
+      log.debug("AudioRecorder.start: engine prepared")
+      try engine.start()
+      log.debug("AudioRecorder.start: engine running")
+      isRunning = true
+    } catch {
+      // Roll back: remove the tap we installed and stop the recognizer we
+      // already started, so a failed start() leaks nothing.
+      engine.inputNode.removeTap(onBus: 0)
+      _ = try? await recognizer.stop()
+      throw error
+    }
   }
 
   func stop() async throws -> String {
