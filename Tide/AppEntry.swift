@@ -22,13 +22,20 @@ final class TideAppDelegate: NSObject, NSApplicationDelegate {
   @MainActor private var dictationCoordinator: DictationCoordinator?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    // Skip single-instance enforcement under XCTest: the test host is the
+    // Tide.app itself, so if a real Tide instance is already running the
+    // guard below would `terminate` the host before the test runner can
+    // connect ("Early unexpected exit … before establishing connection").
+    // Tests don't register hotkeys/status item, so there's nothing to guard.
+    let isRunningTests = NSClassFromString("XCTestCase") != nil
+
     // Single-instance enforcement: if another Tide is already running
     // (e.g. a leftover Xcode-built one while the user double-clicks the
     // shipped /Applications copy, or vice versa) we hand control back
     // to it and terminate this one. Two instances would otherwise both
     // register the same global push-to-talk hotkey, both stick a status
     // item in the menubar, and fight over the microphone.
-    if let bundleID = Bundle.main.bundleIdentifier {
+    if !isRunningTests, let bundleID = Bundle.main.bundleIdentifier {
       let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
         .filter { $0 != NSRunningApplication.current }
       if let existing = others.first {
