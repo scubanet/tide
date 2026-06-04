@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftData
 
 /// Facade over the SwiftData `ModelContainer` that hides persistence
@@ -8,6 +9,8 @@ import SwiftData
 public final class ConversationStore {
   private let container: ModelContainer
   private var context: ModelContext { container.mainContext }
+
+  private static let log = Logger(subsystem: "swiss.weckherlin.tide", category: "store")
 
   public init(container: ModelContainer) {
     self.container = container
@@ -31,7 +34,14 @@ public final class ConversationStore {
       sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
     )
     descriptor.fetchLimit = 1
-    return (try? context.fetch(descriptor))?.first
+    do {
+      return try context.fetch(descriptor).first
+    } catch {
+      // A fetch error is NOT "no conversations" — log it so a transient
+      // store failure that would orphan history is visible.
+      Self.log.warning("activeConversation fetch failed: \(error.localizedDescription, privacy: .public)")
+      return nil
+    }
   }
 
   /// Start a brand-new conversation and return it. The new conversation

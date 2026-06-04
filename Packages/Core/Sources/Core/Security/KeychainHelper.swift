@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import Security
 
 /// Minimal `kSecClassGenericPassword` wrapper for the Tide API-key and
@@ -10,6 +11,8 @@ public enum KeychainHelper {
     case unhandled(OSStatus)
     case encoding
   }
+
+  private static let log = Logger(subsystem: "swiss.weckherlin.tide", category: "keychain")
 
   /// Store `value` under `key`. Replaces any existing entry.
   public static func set(key: String, value: String) throws {
@@ -46,8 +49,18 @@ public enum KeychainHelper {
     ]
     var result: AnyObject?
     let status = SecItemCopyMatching(query as CFDictionary, &result)
-    guard status == errSecSuccess, let data = result as? Data else { return nil }
-    return String(data: data, encoding: .utf8)
+    switch status {
+    case errSecSuccess:
+      guard let data = result as? Data else { return nil }
+      return String(data: data, encoding: .utf8)
+    case errSecItemNotFound:
+      return nil
+    default:
+      // A locked or errored keychain (e.g. errSecInteractionNotAllowed)
+      // is NOT the same as "no key set" — surface it so it's diagnosable.
+      log.warning("keychain get '\(key, privacy: .public)' failed: \(status)")
+      return nil
+    }
   }
 
   /// Remove the entry under `key`. No-op if it doesn't exist.
@@ -57,7 +70,13 @@ public enum KeychainHelper {
       kSecAttrService as String: service,
       kSecAttrAccount as String: key,
     ]
-    SecItemDelete(query as CFDictionary)
+    let status = SecItemDelete(query as CFDictionary)
+    switch status {
+    case errSecSuccess, errSecItemNotFound:
+      break
+    default:
+      log.warning("keychain delete '\(key, privacy: .public)' failed: \(status)")
+    }
   }
 
   private static let service = "swiss.weckherlin.tide"
