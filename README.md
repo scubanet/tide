@@ -7,7 +7,11 @@ Native macOS Menubar-KI-Assistent. Push-to-Talk an Claude mit Text-Selektions-Ko
 - **Push-to-Talk via globalen Hotkey** — beliebige Taste festhalten (default `fn`), reden, loslassen sendet
 - **Live-Streaming-Antworten** von Claude (Anthropic API, SSE-Streaming)
 - **Streaming-TTS** via `AVSpeechSynthesizer` oder **ElevenLabs** (umschaltbar in Settings)
-- **Lokale Transkription** via WhisperKit/CoreML — offline, gratis, kein Audio verlässt den Mac (Modell-Download in Settings → Lokal)
+- **Spracherkennung umschaltbar**: Apple (on-device), ElevenLabs Scribe, Hybrid (Apple live + ElevenLabs final), Lokal (WhisperKit) und Hybrid-Lokal (Apple live + WhisperKit final)
+- **Lokale Transkription** via WhisperKit/CoreML — offline, gratis, kein Audio verlässt den Mac (In-App Modell-Download in Settings → Lokal)
+- **Standalone-Diktat** per eigenem Hotkey direkt an den Cursor der fokussierten App (ohne Panel): **Roh**, **Polished**, **Calmer** (Wut→ruhig), **Emoji**, **Bullets**, **Professional** — je eigener opt-in Hotkey + editierbarer Prompt
+- **Custom-Vokabular** für Namen/Fachjargon — biast Apple-Erkennung + Polish-Schritt
+- **Artefakt-Filter** verwirft zu kurze Aufnahmen / ASR-Halluzinationen
 - **Selektion-Kontext** aus der gerade aktiven App via Accessibility API; Fallback via Clipboard-Swap für Apps ohne AX (Spark, Slack, Browser)
 - **Selektion ersetzen** — Claudes Antwort kann zurück in die selektierte Stelle gepastet werden
 - **6 Quick-Actions** (Zusammenfassen, Übersetzen, Verbessern, Antwort entwerfen, Erklären, Kürzer) + Custom-Editor
@@ -29,7 +33,7 @@ open Tide.xcodeproj
 In Xcode:
 1. Schema **Tide** wählen, Run-Destination **My Mac**
 2. Cmd+R
-3. Beim ersten Start: Settings öffnen (Menubar-Icon → Cog), Anthropic-API-Key eintragen, Hotkey wählen, Voice-Provider wählen
+3. Beim ersten Start: Settings öffnen (Menubar-Icon → Cog) — Sidebar mit Gruppen (Allgemein / Sprache / Diktat / Erweitert). Anthropic-API-Key (Allgemein → API), Recognizer + Voice (Sprache → Stimme), Diktat-Hotkeys (Diktat → Hotkey)
 
 ## Architektur
 
@@ -38,7 +42,7 @@ Tide/                  Xcode-App-Target (Menubar + Panel-UI, Settings)
 └── Packages/          5 Swift Packages
     ├── Core/          Models, Persistence, Settings, Keychain
     ├── LLM/           Anthropic-Provider, SSE-Parser, Tool-Use-Pfad
-    ├── TideSpeech/    Apple + ElevenLabs Speech-/TTS-Providers, Composite-Router
+    ├── TideSpeech/    Apple + ElevenLabs + WhisperKit Speech-Provider, TTS, Hybrid-/Composite-Router
     ├── Selection/     AX-Selection-Reader + Replacer + Clipboard-Fallback
     └── Hotkeys/       Push-to-Talk via KeyboardShortcuts-Library
 ```
@@ -54,9 +58,14 @@ Siehe [CHANGELOG.md](CHANGELOG.md) für Versions-History. Nächste Wellen:
 | Welle | Was | Status |
 |---|---|---|
 | 1 | Polish + Verifications + Icon-Set | ✅ |
-| 2 | ElevenLabs Scribe Hybrid (STT-Genauigkeits-Upgrade) | 🔜 |
-| 3 | Distribution (Sparkle, DMG, Notarization, GitHub-Releases) | 🔜 |
-| 4 | Onboarding-Flow + Crash-Reporting | 🔜 |
+| 2 | ElevenLabs Scribe Hybrid (STT-Genauigkeit) | ✅ |
+| 3 | Standalone-Diktat (Roh/Polished, direkt am Cursor) | ✅ |
+| 4 | Artefakt-Filter + Custom-Vokabular | ✅ |
+| 5 | Lokale Transkription (WhisperKit) + Hybrid-Lokal | ✅ |
+| 6 | Diktat-Transform-Modi (Calmer/Emoji/Bullets/Professional) | ✅ |
+| 7 | Settings-Sidebar | ✅ |
+| 8 | Distribution (DMG, Notarization, GitHub-Releases via Sparkle) | 🔜 |
+| 9 | Onboarding-Flow + Crash-Reporting | 🔜 |
 
 ## Anforderungen
 
