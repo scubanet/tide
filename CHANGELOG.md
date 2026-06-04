@@ -40,6 +40,11 @@ Aktuelle Phase: **pre-release, daily-use by author**, signiertes + notarisiertes
 
 ### Changed
 
+- **AppSettings echt observable** — die Einstellungen nutzen jetzt stored
+  Properties (aus UserDefaults initialisiert, `didSet` persistiert) statt
+  Computed-Getter, sodass `@Observable` Änderungen tatsächlich trackt. Die
+  sechs Settings-Views verlieren ihre `@State`-Mirror-Workarounds und binden
+  direkt. Verhalten unverändert.
 - **Settings als gruppierte Sidebar** — das Settings-Fenster nutzt statt der
   überlaufenden 8-Tab-Leiste (die in ein „» Navigation Tab Bar"-Dropdown
   klappte) eine `NavigationSplitView`-Sidebar mit Gruppen (Allgemein / Sprache
