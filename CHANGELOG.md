@@ -20,6 +20,11 @@ Aktuelle Phase: **pre-release, daily-use by author**, signiertes + notarisiertes
   bliebene Aufnahmen bei schnellem Hotkey-Tap, Recorder-Leak bei Start-Fehler,
   Pillen-Flacker-Races, ElevenLabs-TTS-Reihenfolge und ein Recorder-Retain im
   Panel-Pfad behoben (aus dem App-Audit).
+- **LLM-Stream-Robustheit** — Anthropic-Fehler werden nicht mehr verschluckt:
+  ein Mid-Stream-`error`-Event (z.B. Überlast) bricht den Stream mit Fehler ab
+  statt still abzuschneiden, HTTP-Fehler zeigen die echte Server-Meldung, und
+  der Chat-Fehler-Text ist dank `LLMError: LocalizedError` aussagekräftig. Plus
+  ein defensiver Role-Guard (nur user/assistant im `messages`-Array).
 
 ### Added
 
