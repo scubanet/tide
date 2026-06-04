@@ -123,6 +123,14 @@ final class DictationCoordinator {
     self.recorder = rec
     do {
       try await rec.start()
+      // A stop() may have fired during the await (fast tap), nilling
+      // `recorder`. If so, this session is stale — tear it down instead of
+      // leaving a running engine with no way to stop it.
+      guard self.recorder === rec else {
+        Self.logger.debug("start: session superseded during await — tearing down")
+        _ = try? await rec.stop()
+        return
+      }
       Self.logger.debug("recording started (mode: \(String(describing: mode), privacy: .public))")
       // Phase C: show visual feedback and start draining live partials
       // into the floating pill. The pill is non-activating so this never
