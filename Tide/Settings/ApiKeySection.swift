@@ -48,6 +48,17 @@ struct ApiKeySection: View {
       } header: {
         Text("Anthropic API-Key")
       }
+
+      Section {
+        Button("Onboarding erneut starten") {
+          NotificationCenter.default.post(name: .tideOpenOnboarding, object: nil)
+        }
+      } footer: {
+        Text("Öffnet den Einrichtungs-Assistenten (API-Key, Berechtigungen, "
+          + "Hotkeys, Stimme) erneut.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
     }
     .formStyle(.grouped)
   }
