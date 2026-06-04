@@ -27,6 +27,15 @@ struct HotkeySection: View {
           + "(Grammatik + Punktuation, Inhalt 1:1). +1-2s Latenz.")
           .font(.caption)
           .foregroundStyle(.secondary)
+
+        KeyboardShortcuts.Recorder("Diktieren (Calmer):", name: .dictateCalmer)
+        KeyboardShortcuts.Recorder("Diktieren (Emoji):", name: .dictateEmoji)
+        KeyboardShortcuts.Recorder("Diktieren (Bullets):", name: .dictateBullets)
+        KeyboardShortcuts.Recorder("Diktieren (Professional):", name: .dictateProfessional)
+        Text("Transform-Modi: der Text geht vor dem Einfügen durch Claude mit "
+          + "dem jeweiligen Prompt (editierbar in Settings → Diktat). Alle opt-in.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
       } header: {
         Text("Standalone Dictation (Welle 4)")
       }

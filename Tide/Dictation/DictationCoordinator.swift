@@ -7,15 +7,32 @@ import LLM
 import TideSpeech
 import Selection
 
-/// Which post-processing path a dictation session should take after the
-/// recognizer returns its final text.
-///
-/// - `.raw`: insert the transcript verbatim (Phase D).
-/// - `.polished`: route through Claude for grammar/punctuation cleanup
-///   first, then insert (Phase E).
-enum DictationMode {
+/// Which post-processing path a dictation session takes after the
+/// recognizer returns its final text. `raw` inserts verbatim; every other
+/// case routes the transcript through `DictationPolisher` with that mode's
+/// editable base prompt.
+enum DictationMode: String, CaseIterable, Sendable {
   case raw
   case polished
+  case calmer
+  case emoji
+  case bullets
+  case professional
+
+  var isRaw: Bool { self == .raw }
+
+  /// The editable base prompt for this transform mode, or `nil` for `.raw`.
+  @MainActor
+  func basePrompt(from settings: AppSettings) -> String? {
+    switch self {
+    case .raw:          nil
+    case .polished:     settings.dictationPolishPrompt
+    case .calmer:       settings.dictationCalmerPrompt
+    case .emoji:        settings.dictationEmojiPrompt
+    case .bullets:      settings.dictationBulletsPrompt
+    case .professional: settings.dictationProfessionalPrompt
+    }
+  }
 }
 
 /// Orchestrates a single standalone-dictation session start-to-finish.
@@ -157,26 +174,22 @@ final class DictationCoordinator {
         indicator?.flash("Nichts erkannt")
         return
       }
-      switch self.currentMode {
-      case .raw:
+      if self.currentMode.isRaw {
         let result = await TextInjector.insert(trimmed)
         Self.logger.debug("text-injector result: \(String(describing: result), privacy: .public)")
-      case .polished:
-        // Phase E: route through Claude first. Any failure mode
-        // (no API key, network/5xx, timeout, empty response) is caught
-        // and degrades to the raw transcript + a notification so the
-        // user always lands their dictation somewhere.
+      } else {
+        let base = self.currentMode.basePrompt(from: settings) ?? ""
         do {
-          let polished = try await polisher.polish(trimmed)
-          let result = await TextInjector.insert(polished)
-          Self.logger.debug("polish result: \(String(describing: result), privacy: .public)")
+          let transformed = try await polisher.polish(trimmed, basePrompt: base)
+          let result = await TextInjector.insert(transformed)
+          Self.logger.debug("transform (\(self.currentMode.rawValue, privacy: .public)) result: \(String(describing: result), privacy: .public)")
         } catch {
           Self.logger.warning(
-            "polish failed: \(String(describing: error), privacy: .public) — injecting raw"
+            "transform failed: \(String(describing: error), privacy: .public) — injecting raw"
           )
           let result = await TextInjector.insert(trimmed)
           Self.logger.debug(
-            "polish-fallback (raw) result: \(String(describing: result), privacy: .public)"
+            "transform-fallback (raw) result: \(String(describing: result), privacy: .public)"
           )
           await notifyPolishFailed()
         }

@@ -126,6 +126,30 @@ final class TideAppDelegate: NSObject, NSApplicationDelegate {
         KeyboardShortcuts.onKeyUp(for: .dictatePolished) {
           Task { @MainActor in await dictation.stop() }
         }
+        KeyboardShortcuts.onKeyDown(for: .dictateCalmer) {
+          Task { @MainActor in await dictation.start(mode: .calmer) }
+        }
+        KeyboardShortcuts.onKeyUp(for: .dictateCalmer) {
+          Task { @MainActor in await dictation.stop() }
+        }
+        KeyboardShortcuts.onKeyDown(for: .dictateEmoji) {
+          Task { @MainActor in await dictation.start(mode: .emoji) }
+        }
+        KeyboardShortcuts.onKeyUp(for: .dictateEmoji) {
+          Task { @MainActor in await dictation.stop() }
+        }
+        KeyboardShortcuts.onKeyDown(for: .dictateBullets) {
+          Task { @MainActor in await dictation.start(mode: .bullets) }
+        }
+        KeyboardShortcuts.onKeyUp(for: .dictateBullets) {
+          Task { @MainActor in await dictation.stop() }
+        }
+        KeyboardShortcuts.onKeyDown(for: .dictateProfessional) {
+          Task { @MainActor in await dictation.start(mode: .professional) }
+        }
+        KeyboardShortcuts.onKeyUp(for: .dictateProfessional) {
+          Task { @MainActor in await dictation.stop() }
+        }
       } catch {
         NSLog("Tide: failed to init store: \(error)")
       }

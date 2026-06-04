@@ -67,7 +67,7 @@ final class DictationPolisher {
   /// Polish `raw` through the configured LLM provider. Throws on every
   /// failure mode — caller decides whether to fall back to the raw
   /// transcript (in production: yes, always).
-  func polish(_ raw: String) async throws -> String {
+  func polish(_ raw: String, basePrompt: String) async throws -> String {
     // Lazy guard: if the user removed their API key we'd otherwise
     // wait the full timeout window for the provider to ECONNREFUSED.
     // Short-circuit so the fallback notification fires immediately.
@@ -78,7 +78,7 @@ final class DictationPolisher {
     }
 
     let systemPrompt = Self.systemPrompt(
-      base: settings.dictationPolishPrompt,
+      base: basePrompt,
       vocabulary: settings.customVocabulary
     )
     let userMessage = LLMMessage(role: .user, content: raw)

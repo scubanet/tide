@@ -61,7 +61,7 @@ final class DictationPolisherTests: XCTestCase {
       settings: settings,
       timeoutSeconds: 2
     )
-    let out = try await polisher.polish("the raw text")
+    let out = try await polisher.polish("the raw text", basePrompt: settings.dictationPolishPrompt)
     XCTAssertEqual(out, "The polished text.")
   }
 
@@ -73,21 +73,16 @@ final class DictationPolisherTests: XCTestCase {
       settings: settings,
       timeoutSeconds: 2
     )
-    let out = try await polisher.polish("raw")
+    let out = try await polisher.polish("raw", basePrompt: settings.dictationPolishPrompt)
     XCTAssertEqual(out, "Polished.")
   }
 
   // MARK: - Wiring assertions
 
-  func test_polish_forwardsSystemPromptFromSettings() async throws {
-    settings.dictationPolishPrompt = "MY CUSTOM PROMPT"
+  func test_polish_forwardsBasePrompt() async throws {
     let stub = StubProvider(chunks: ["ok"])
-    let polisher = DictationPolisher(
-      provider: stub,
-      settings: settings,
-      timeoutSeconds: 2
-    )
-    _ = try await polisher.polish("raw")
+    let polisher = DictationPolisher(provider: stub, settings: settings, timeoutSeconds: 2)
+    _ = try await polisher.polish("raw", basePrompt: "MY CUSTOM PROMPT")
     XCTAssertEqual(stub.lastSystemPrompt, "MY CUSTOM PROMPT")
   }
 
@@ -98,7 +93,7 @@ final class DictationPolisherTests: XCTestCase {
       settings: settings,
       timeoutSeconds: 2
     )
-    _ = try await polisher.polish("the raw transcript")
+    _ = try await polisher.polish("the raw transcript", basePrompt: settings.dictationPolishPrompt)
     XCTAssertEqual(stub.lastMessages?.count, 1)
     XCTAssertEqual(stub.lastMessages?.first?.role, .user)
     XCTAssertEqual(stub.lastMessages?.first?.content, "the raw transcript")
@@ -112,7 +107,7 @@ final class DictationPolisherTests: XCTestCase {
       settings: settings,
       timeoutSeconds: 2
     )
-    _ = try await polisher.polish("raw")
+    _ = try await polisher.polish("raw", basePrompt: settings.dictationPolishPrompt)
     XCTAssertEqual(stub.lastModel, "claude-opus-test")
   }
 
@@ -135,7 +130,7 @@ final class DictationPolisherTests: XCTestCase {
       timeoutSeconds: 2
     )
     do {
-      _ = try await polisher.polish("raw")
+      _ = try await polisher.polish("raw", basePrompt: settings.dictationPolishPrompt)
       XCTFail("expected missingAPIKey")
     } catch DictationPolisher.PolishError.missingAPIKey {
       // ok
@@ -156,7 +151,7 @@ final class DictationPolisherTests: XCTestCase {
       timeoutSeconds: 2
     )
     do {
-      _ = try await polisher.polish("raw")
+      _ = try await polisher.polish("raw", basePrompt: settings.dictationPolishPrompt)
       XCTFail("expected empty")
     } catch DictationPolisher.PolishError.empty {
       // ok
@@ -173,7 +168,7 @@ final class DictationPolisherTests: XCTestCase {
       timeoutSeconds: 2
     )
     do {
-      _ = try await polisher.polish("raw")
+      _ = try await polisher.polish("raw", basePrompt: settings.dictationPolishPrompt)
       XCTFail("expected empty")
     } catch DictationPolisher.PolishError.empty {
       // ok
@@ -193,7 +188,7 @@ final class DictationPolisherTests: XCTestCase {
     )
     let started = Date()
     do {
-      _ = try await polisher.polish("raw")
+      _ = try await polisher.polish("raw", basePrompt: settings.dictationPolishPrompt)
       XCTFail("expected timeout")
     } catch DictationPolisher.PolishError.timeout {
       let elapsed = Date().timeIntervalSince(started)
@@ -211,7 +206,7 @@ final class DictationPolisherTests: XCTestCase {
       timeoutSeconds: 2
     )
     do {
-      _ = try await polisher.polish("raw")
+      _ = try await polisher.polish("raw", basePrompt: settings.dictationPolishPrompt)
       XCTFail("expected provider error")
     } catch DictationPolisher.PolishError.provider {
       // ok
@@ -223,7 +218,6 @@ final class DictationPolisherTests: XCTestCase {
   // MARK: - Custom vocabulary injection
 
   func test_polish_appendsVocabularyToSystemPrompt() async throws {
-    settings.dictationPolishPrompt = "BASE PROMPT"
     settings.customVocabulary = ["PADI", "SeaExplorers"]
     let stub = StubProvider(chunks: ["ok"])
     let polisher = DictationPolisher(
@@ -231,7 +225,7 @@ final class DictationPolisherTests: XCTestCase {
       settings: settings,
       timeoutSeconds: 2
     )
-    _ = try await polisher.polish("raw")
+    _ = try await polisher.polish("raw", basePrompt: "BASE PROMPT")
     let prompt = try XCTUnwrap(stub.lastSystemPrompt)
     XCTAssertTrue(prompt.hasPrefix("BASE PROMPT"))
     XCTAssertTrue(prompt.contains("PADI"))
@@ -239,7 +233,6 @@ final class DictationPolisherTests: XCTestCase {
   }
 
   func test_polish_leavesSystemPromptUnchanged_whenNoVocabulary() async throws {
-    settings.dictationPolishPrompt = "BASE PROMPT"
     // customVocabulary defaults to empty.
     let stub = StubProvider(chunks: ["ok"])
     let polisher = DictationPolisher(
@@ -247,7 +240,7 @@ final class DictationPolisherTests: XCTestCase {
       settings: settings,
       timeoutSeconds: 2
     )
-    _ = try await polisher.polish("raw")
+    _ = try await polisher.polish("raw", basePrompt: "BASE PROMPT")
     XCTAssertEqual(stub.lastSystemPrompt, "BASE PROMPT")
   }
 }

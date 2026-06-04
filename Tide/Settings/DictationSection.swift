@@ -1,56 +1,102 @@
 import SwiftUI
 import Core
 
-/// Settings tab for Welle 4 standalone dictation (Tide v0.3.0).
+/// Settings tab for standalone dictation: per-mode transform prompts +
+/// the on-screen pill position.
 ///
-/// The hotkeys themselves are configured in the existing
-/// `HotkeySection` (Settings → Hotkey) — keeping all
-/// `KeyboardShortcuts.Recorder` widgets in one place avoids a
-/// confusing "which tab do I go to" choice. This tab covers the
-/// dictation-specific *behaviour* knobs: the polish-mode system
-/// prompt and the on-screen pill position.
+/// The five transform modes (polished/calmer/emoji/bullets/professional)
+/// each have an editable system prompt. A picker selects which one the
+/// editor shows; writing saves to that mode's `AppSettings` key.
+/// `raw` has no prompt and is excluded from the picker.
 struct DictationSection: View {
   @State private var settings = AppSettings()
-  @State private var polishPrompt: String = ""
+  @State private var selectedMode: PromptMode = .polished
+  @State private var promptText: String = ""
   @State private var pillPosition: String = "topCenter"
 
-  /// Default we ship — kept here so the "Restore default" button can
-  /// reset to it without round-tripping through `AppSettings`.
-  private static let defaultPolishPrompt =
-    "You are a text editor. Fix grammar and punctuation in the user's "
-    + "text. Reply in the SAME language as the input. Keep the meaning "
-    + "1:1, do not shorten, do not add anything, do not explain. Output "
-    + "ONLY the corrected text."
+  /// The prompt-bearing modes (everything except raw).
+  enum PromptMode: String, CaseIterable, Identifiable {
+    case polished, calmer, emoji, bullets, professional
+    var id: String { rawValue }
+    var label: String {
+      switch self {
+      case .polished:     "Polished"
+      case .calmer:       "Calmer"
+      case .emoji:        "Emoji"
+      case .bullets:      "Bullets"
+      case .professional: "Professional"
+      }
+    }
+    @MainActor var `default`: String {
+      switch self {
+      case .polished:     AppSettings.defaultPolishPrompt
+      case .calmer:       AppSettings.defaultCalmerPrompt
+      case .emoji:        AppSettings.defaultEmojiPrompt
+      case .bullets:      AppSettings.defaultBulletsPrompt
+      case .professional: AppSettings.defaultProfessionalPrompt
+      }
+    }
+  }
+
+  private func currentPrompt(_ mode: PromptMode) -> String {
+    switch mode {
+    case .polished:     settings.dictationPolishPrompt
+    case .calmer:       settings.dictationCalmerPrompt
+    case .emoji:        settings.dictationEmojiPrompt
+    case .bullets:      settings.dictationBulletsPrompt
+    case .professional: settings.dictationProfessionalPrompt
+    }
+  }
+
+  private func setPrompt(_ mode: PromptMode, _ value: String) {
+    switch mode {
+    case .polished:     settings.dictationPolishPrompt = value
+    case .calmer:       settings.dictationCalmerPrompt = value
+    case .emoji:        settings.dictationEmojiPrompt = value
+    case .bullets:      settings.dictationBulletsPrompt = value
+    case .professional: settings.dictationProfessionalPrompt = value
+    }
+  }
 
   var body: some View {
     Form {
       Section {
-        Text("Wird vor jeder *Polish*-Diktatsitzung als System-Prompt an "
-          + "Claude gesendet. Der Rohtext kommt als einzelne User-Nachricht "
-          + "hinterher.")
+        Picker("Modus:", selection: $selectedMode) {
+          ForEach(PromptMode.allCases) { mode in
+            Text(mode.label).tag(mode)
+          }
+        }
+        .pickerStyle(.menu)
+        .onChange(of: selectedMode) { _, newMode in
+          promptText = currentPrompt(newMode)
+        }
+
+        Text("System-Prompt für den gewählten Transform-Modus. Wird vor "
+          + "jeder Sitzung dieses Modus an Claude gesendet; der Rohtext "
+          + "kommt als User-Nachricht hinterher.")
           .font(.caption)
           .foregroundStyle(.secondary)
 
-        TextEditor(text: $polishPrompt)
+        TextEditor(text: $promptText)
           .font(.system(size: 12, design: .monospaced))
           .frame(minHeight: 120)
           .overlay(
             RoundedRectangle(cornerRadius: 4)
               .stroke(Color.gray.opacity(0.3), lineWidth: 1)
           )
-          .onChange(of: polishPrompt) { _, newValue in
-            settings.dictationPolishPrompt = newValue
+          .onChange(of: promptText) { _, newValue in
+            setPrompt(selectedMode, newValue)
           }
 
         HStack {
           Button("Standard wiederherstellen") {
-            polishPrompt = Self.defaultPolishPrompt
-            settings.dictationPolishPrompt = Self.defaultPolishPrompt
+            promptText = selectedMode.default
+            setPrompt(selectedMode, selectedMode.default)
           }
           .controlSize(.small)
           Spacer()
         }
-      } header: { Text("Polish-Prompt") }
+      } header: { Text("Transform-Prompts") }
 
       Section {
         Picker("Position:", selection: $pillPosition) {
@@ -63,21 +109,14 @@ struct DictationSection: View {
           settings.dictationPillPosition = newValue
         }
 
-        Text("Wo erscheint die kleine Aufnahme-Pille während des "
-          + "Diktats — direkt unter der Menubar (oben Mitte), in der "
-          + "Ecke oben rechts oder am unteren Rand des Hauptbildschirms.")
+        Text("Wo erscheint die kleine Aufnahme-Pille während des Diktats.")
           .font(.caption)
           .foregroundStyle(.secondary)
       } header: { Text("Aufnahme-Pille") }
     }
     .formStyle(.grouped)
     .task {
-      // Seed local @State from the persisted settings on first
-      // appear. (AppSettings reads UserDefaults directly — these
-      // properties are computed, not stored, so the @Observable
-      // macro doesn't track them. Mirroring in @State is the same
-      // pattern VoiceSection uses for the recognizer picker.)
-      polishPrompt = settings.dictationPolishPrompt
+      promptText = currentPrompt(selectedMode)
       pillPosition = settings.dictationPillPosition
     }
   }
