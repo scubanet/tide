@@ -34,6 +34,7 @@ public enum SpeechRecognizerChoice: String, Sendable, CaseIterable, Codable {
   case elevenLabs
   case hybrid
   case whisperKit
+  case hybridLocal
 
   public static let `default`: Self = .hybrid
 
@@ -43,19 +44,20 @@ public enum SpeechRecognizerChoice: String, Sendable, CaseIterable, Codable {
     case .elevenLabs:  "ElevenLabs (höhere Genauigkeit)"
     case .hybrid:      "Hybrid (Apple live + ElevenLabs final)"
     case .whisperKit:  "Lokal (WhisperKit, offline)"
+    case .hybridLocal: "Hybrid Lokal (Apple live + WhisperKit final)"
     }
   }
 
   /// True if this choice requires an ElevenLabs API key to be set.
   public var requiresElevenLabsKey: Bool {
     switch self {
-    case .apple, .whisperKit:      false
-    case .elevenLabs, .hybrid:     true
+    case .apple, .whisperKit, .hybridLocal:  false
+    case .elevenLabs, .hybrid:               true
     }
   }
 
   /// True if this choice needs a local WhisperKit model installed.
   public var requiresLocalModel: Bool {
-    self == .whisperKit
+    self == .whisperKit || self == .hybridLocal
   }
 }
