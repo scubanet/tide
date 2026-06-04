@@ -8,12 +8,12 @@ struct LocalModelSection: View {
   @State private var settings = AppSettings()
   @State private var store = WhisperModelStore()
   @State private var catalog: [WhisperModelInfo] = []
-  @State private var selectedModel: String = ""
   @State private var downloading = false
   @State private var downloadProgress: Double = 0
   @State private var downloadError: String?
 
   var body: some View {
+    @Bindable var settings = settings
     Form {
       Section {
         Text("Vollständig offline & gratis nach dem Download. Wähle danach "
@@ -21,7 +21,7 @@ struct LocalModelSection: View {
           .font(.caption)
           .foregroundStyle(.secondary)
 
-        Picker("Modell:", selection: $selectedModel) {
+        Picker("Modell:", selection: $settings.localModelName) {
           ForEach(catalog) { model in
             Text("\(model.displayName) · \(model.approxSizeMB) MB"
               + (model.isInstalled ? " ✓" : ""))
@@ -29,12 +29,11 @@ struct LocalModelSection: View {
           }
         }
         .disabled(downloading)
-        .onChange(of: selectedModel) { _, newValue in
-          settings.localModelName = newValue
-          prewarmIfInstalled(newValue)
+        .onChange(of: settings.localModelName) { _, new in
+          prewarmIfInstalled(new)
         }
 
-        if let selected = catalog.first(where: { $0.id == selectedModel }) {
+        if let selected = catalog.first(where: { $0.id == settings.localModelName }) {
           if selected.isInstalled {
             Label("Installiert", systemImage: "checkmark.circle.fill")
               .foregroundStyle(.green)
@@ -58,8 +57,7 @@ struct LocalModelSection: View {
     .formStyle(.grouped)
     .task {
       catalog = store.catalog()
-      selectedModel = settings.localModelName
-      prewarmIfInstalled(selectedModel)
+      prewarmIfInstalled(settings.localModelName)
     }
   }
 
