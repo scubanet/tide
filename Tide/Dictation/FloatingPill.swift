@@ -77,6 +77,16 @@ final class FloatingPill: NSPanel {
   private var position: String
   private let viewState = PillViewState()
 
+  /// Monotonic token bumped on every `show`/`flash`/`hide`. The delayed
+  /// cleanup bodies (fade-out order-out, hint reset) capture the value at
+  /// scheduling time and no-op if a newer call has since superseded them —
+  /// so a flash's fade can never order-out or clobber a freshly-shown
+  /// recording pill.
+  private var generation = 0
+  /// The currently-pending delayed cleanup body, cancelled whenever a new
+  /// `show`/`flash`/`hide` arrives.
+  private var cleanupTask: Task<Void, Never>?
+
   init(position: String) {
     self.position = position
     super.init(
@@ -112,6 +122,10 @@ final class FloatingPill: NSPanel {
   /// screen. Resets `alphaValue` to 1.0 so a previously-faded pill is
   /// fully opaque again.
   func show(initialText: String) {
+    // A freshly-shown pill must invalidate any pending fade/reset from a
+    // prior flash/hide so they can't order it out or clobber its state.
+    generation += 1
+    cleanupTask?.cancel()
     viewState.isHint = false
     viewState.partial = initialText
     repositionForCurrentScreen()
@@ -127,18 +141,32 @@ final class FloatingPill: NSPanel {
   /// session produced no usable transcript. Re-positions and re-shows
   /// the pill even if it was already faded out by a prior `hide()`.
   func flash(_ message: String, duration: TimeInterval = 1.2) {
+    generation += 1
+    let gen = generation
+    cleanupTask?.cancel()
     viewState.isHint = true
     viewState.partial = message
     repositionForCurrentScreen()
     self.alphaValue = 1.0
     self.orderFrontRegardless()
-    Task { @MainActor [weak self] in
+    cleanupTask = Task { @MainActor [weak self] in
       try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
-      self?.hide()
+      // A newer show/flash/hide superseded this flash — leave the new
+      // session's pill alone. Checked before every side effect below so a
+      // late-arriving session can't be clobbered mid-sequence.
+      guard let self, self.generation == gen else { return }
+      // Inline the fade (rather than calling hide(), which would bump the
+      // generation and cancel this very task) so the whole flash sequence
+      // stays one coherent token-guarded body.
+      self.fadeOutAnimation()
+      try? await Task.sleep(nanoseconds: 160_000_000)
+      guard self.generation == gen else { return }
+      self.orderOut(nil)
       // Reset hint state after the fade so the next live session starts
       // with the red recording dot.
       try? await Task.sleep(nanoseconds: 200_000_000)
-      self?.viewState.isHint = false
+      guard self.generation == gen else { return }
+      self.viewState.isHint = false
     }
   }
 
@@ -155,13 +183,24 @@ final class FloatingPill: NSPanel {
   /// MainActor without bouncing through a `@Sendable` callback (Swift 6
   /// strict-concurrency friendly).
   func hide() {
+    generation += 1
+    let gen = generation
+    cleanupTask?.cancel()
+    fadeOutAnimation()
+    cleanupTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(nanoseconds: 160_000_000)
+      guard let self, self.generation == gen else { return }
+      self.orderOut(nil)
+    }
+  }
+
+  /// Animate the pill's alpha to zero over 150ms. Factored out so both
+  /// `hide()` (sync context) and `flash`'s cleanup task (async context)
+  /// invoke the synchronous `runAnimationGroup` overload unambiguously.
+  private func fadeOutAnimation() {
     NSAnimationContext.runAnimationGroup { context in
       context.duration = 0.15
       self.animator().alphaValue = 0.0
-    }
-    Task { @MainActor [weak self] in
-      try? await Task.sleep(nanoseconds: 160_000_000)
-      self?.orderOut(nil)
     }
   }
 
