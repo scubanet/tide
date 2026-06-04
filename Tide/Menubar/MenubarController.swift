@@ -11,6 +11,7 @@ final class MenubarController {
   private let conversationStore: ConversationStore
   let chatViewModel: ChatViewModel
   private var settingsWindow: NSWindow?
+  private var onboardingWindow: NSWindow?
 
   /// Exposes the underlying `NSStatusItem` so the dictation coordinator
   /// can wire a `DictationIndicator` against the same status-bar button
@@ -69,6 +70,11 @@ final class MenubarController {
       onOpenSettings: { [weak self] in self?.openSettings() }
     )
     panel.contentViewController = NSHostingController(rootView: view)
+    NotificationCenter.default.addObserver(
+      forName: .tideOpenOnboarding, object: nil, queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in self?.openOnboarding() }
+    }
   }
 
   /// Open (or focus) the Settings window. Wired from the panel's gear button.
@@ -94,6 +100,29 @@ final class MenubarController {
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
     settingsWindow = window
+  }
+
+  /// Open (or focus) the first-run onboarding wizard.
+  func openOnboarding() {
+    if let existing = onboardingWindow {
+      existing.makeKeyAndOrderFront(nil)
+      NSApp.activate(ignoringOtherApps: true)
+      return
+    }
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 560, height: 460),
+      styleMask: [.titled, .closable],
+      backing: .buffered,
+      defer: false
+    )
+    window.title = "Tide — Einrichtung"
+    window.isReleasedWhenClosed = false
+    let view = OnboardingView(onClose: { [weak window] in window?.close() })
+    window.contentViewController = NSHostingController(rootView: view)
+    window.center()
+    window.makeKeyAndOrderFront(nil)
+    NSApp.activate(ignoringOtherApps: true)
+    onboardingWindow = window
   }
 
   @objc private func togglePanel() {

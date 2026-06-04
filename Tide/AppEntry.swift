@@ -82,6 +82,13 @@ final class TideAppDelegate: NSObject, NSApplicationDelegate {
           provider: provider
         )
         self.menubarController = controller
+
+        // First-run onboarding: no Anthropic key yet → guide setup.
+        let hasOnboardingKey = KeychainHelper.get(key: "anthropic.api_key")?.isEmpty == false
+        if !hasOnboardingKey {
+          controller.openOnboarding()
+        }
+
         self.pushToTalk = PushToTalkHandler(
           onPress: { [weak controller] in
             guard let controller else { return }
