@@ -9,6 +9,13 @@ Aktuelle Phase: **pre-release, daily-use by author**, signiertes + notarisiertes
 
 ## [Unreleased]
 
+### Added
+
+- **Onboarding-Wizard** — beim ersten Start (kein Anthropic-Key) führt ein
+  gestufter Assistent durch die Einrichtung: Welcome → API-Key → Berechtigungen
+  (Mic / Spracherkennung / Accessibility) → Hotkeys → Sprache & Stimme → Fertig.
+  Jederzeit erneut startbar über Einstellungen → Allgemein → API.
+
 ### Changed
 
 - **Settings als gruppierte Sidebar** — das Settings-Fenster nutzt statt der
