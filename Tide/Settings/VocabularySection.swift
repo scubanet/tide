@@ -6,12 +6,10 @@ import Core
 /// Domain terms entered here bias the Apple speech recognizer
 /// (`contextualStrings`) and are injected into the polished-dictation
 /// system prompt so Claude spells jargon (PADI, SeaExplorers, …)
-/// correctly. The list is mirrored into local `@State` and written back
-/// to `AppSettings.customVocabulary` on every change — same pattern as
-/// `DictationSection`'s prompt mirror.
+/// correctly. The list is read and written directly on
+/// `AppSettings.customVocabulary`, which `@Observable` now tracks.
 struct VocabularySection: View {
   @State private var settings = AppSettings()
-  @State private var terms: [String] = []
   @State private var newTerm: String = ""
 
   /// Above this count we surface a soft warning — Apple recommends fewer
@@ -28,18 +26,19 @@ struct VocabularySection: View {
           .font(.caption)
           .foregroundStyle(.secondary)
 
-        if terms.isEmpty {
+        if settings.customVocabulary.isEmpty {
           Text("Noch keine Begriffe.")
             .font(.caption)
             .foregroundStyle(.tertiary)
         } else {
           List {
-            ForEach(terms, id: \.self) { term in
+            ForEach(settings.customVocabulary, id: \.self) { term in
               Text(term)
             }
             .onDelete { offsets in
-              terms.remove(atOffsets: offsets)
-              settings.customVocabulary = terms
+              var v = settings.customVocabulary
+              v.remove(atOffsets: offsets)
+              settings.customVocabulary = v
             }
           }
           .frame(minHeight: 120)
@@ -53,7 +52,7 @@ struct VocabularySection: View {
             .disabled(newTerm.trimmingCharacters(in: .whitespaces).isEmpty)
         }
 
-        if terms.count > Self.softLimit {
+        if settings.customVocabulary.count > Self.softLimit {
           Text("Apple empfiehlt unter 100 Begriffe; sehr lange Listen "
             + "können die Erkennung verschlechtern.")
             .font(.caption)
@@ -62,16 +61,12 @@ struct VocabularySection: View {
       } header: { Text("Vokabular") }
     }
     .formStyle(.grouped)
-    .task {
-      terms = settings.customVocabulary
-    }
   }
 
   private func addTerm() {
     let trimmed = newTerm.trimmingCharacters(in: .whitespaces)
-    guard !trimmed.isEmpty, !terms.contains(trimmed) else { return }
-    terms.append(trimmed)
-    settings.customVocabulary = terms
+    guard !trimmed.isEmpty, !settings.customVocabulary.contains(trimmed) else { return }
+    settings.customVocabulary.append(trimmed)
     newTerm = ""
   }
 }

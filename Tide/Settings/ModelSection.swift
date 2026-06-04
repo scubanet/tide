@@ -11,12 +11,10 @@ struct ModelSection: View {
   ]
 
   var body: some View {
+    @Bindable var settings = settings
     Form {
       Section {
-        Picker("Anthropic-Modell:", selection: Binding(
-          get: { settings.selectedModel },
-          set: { settings.selectedModel = $0 }
-        )) {
+        Picker("Anthropic-Modell:", selection: $settings.selectedModel) {
           ForEach(availableModels, id: \.self) { model in
             Text(modelLabel(for: model)).tag(model)
           }

@@ -10,11 +10,7 @@ import Observation
 @Observable
 @MainActor
 public final class AppSettings {
-  private let defaults: UserDefaults
-
-  public init(defaults: UserDefaults = .standard) {
-    self.defaults = defaults
-  }
+  @ObservationIgnored private let defaults: UserDefaults
 
   // Default transform-mode prompts. Single source of truth: the property
   // getters fall back to these, and DictationSection's "restore default"
@@ -59,35 +55,29 @@ public final class AppSettings {
   }
 
   public var selectedModel: String {
-    get { defaults.string(forKey: Key.selectedModel) ?? "claude-sonnet-4-6" }
-    set { defaults.set(newValue, forKey: Key.selectedModel) }
+    didSet { defaults.set(selectedModel, forKey: Key.selectedModel) }
   }
 
   /// `nil` (never set) collapses to `true` so first-launch users hear the
   /// response read aloud. Explicit `false` is respected.
   public var voiceEnabled: Bool {
-    get { defaults.object(forKey: Key.voiceEnabled) as? Bool ?? true }
-    set { defaults.set(newValue, forKey: Key.voiceEnabled) }
+    didSet { defaults.set(voiceEnabled, forKey: Key.voiceEnabled) }
   }
 
   public var voiceIdentifier: String {
-    get { defaults.string(forKey: Key.voiceIdentifier) ?? "com.apple.voice.compact.de-DE.Anna" }
-    set { defaults.set(newValue, forKey: Key.voiceIdentifier) }
+    didSet { defaults.set(voiceIdentifier, forKey: Key.voiceIdentifier) }
   }
 
   public var replaceSelectionByDefault: Bool {
-    get { defaults.bool(forKey: Key.replaceSelectionByDefault) }
-    set { defaults.set(newValue, forKey: Key.replaceSelectionByDefault) }
+    didSet { defaults.set(replaceSelectionByDefault, forKey: Key.replaceSelectionByDefault) }
   }
 
   public var ttsProvider: String {
-    get { defaults.string(forKey: Key.ttsProvider) ?? "apple" }
-    set { defaults.set(newValue, forKey: Key.ttsProvider) }
+    didSet { defaults.set(ttsProvider, forKey: Key.ttsProvider) }
   }
 
   public var elevenLabsVoiceID: String {
-    get { defaults.string(forKey: Key.elevenLabsVoiceID) ?? "21m00Tcm4TlvDq8ikWAM" }  // Rachel
-    set { defaults.set(newValue, forKey: Key.elevenLabsVoiceID) }
+    didSet { defaults.set(elevenLabsVoiceID, forKey: Key.elevenLabsVoiceID) }
   }
 
   /// Which speech recognizer to use. Stored as the raw-string of
@@ -99,8 +89,7 @@ public final class AppSettings {
   /// (`ChatViewModel`, `VoiceSection`) bridge to/from the typed enum
   /// via `SpeechRecognizerChoice(rawValue:)`.
   public var speechRecognizer: String {
-    get { defaults.string(forKey: Key.speechRecognizer) ?? "hybrid" }
-    set { defaults.set(newValue, forKey: Key.speechRecognizer) }
+    didSet { defaults.set(speechRecognizer, forKey: Key.speechRecognizer) }
   }
 
   /// Whether `stopRecording()` should auto-send the transcribed text or
@@ -111,8 +100,7 @@ public final class AppSettings {
   /// Set this to `false` to use Tide as a pure dictation tool: speak,
   /// release the hotkey, edit the text, press Enter to send.
   public var autoSendAfterPushToTalk: Bool {
-    get { defaults.object(forKey: Key.autoSendAfterPushToTalk) as? Bool ?? true }
-    set { defaults.set(newValue, forKey: Key.autoSendAfterPushToTalk) }
+    didSet { defaults.set(autoSendAfterPushToTalk, forKey: Key.autoSendAfterPushToTalk) }
   }
 
   /// System prompt used by the polished-dictation hotkey (Tide v0.3.0,
@@ -122,8 +110,7 @@ public final class AppSettings {
   /// it works for DE/EN/FR inputs without per-language tuning; the
   /// model is instructed to reply in the same language as the input.
   public var dictationPolishPrompt: String {
-    get { defaults.string(forKey: Key.dictationPolishPrompt) ?? Self.defaultPolishPrompt }
-    set { defaults.set(newValue, forKey: Key.dictationPolishPrompt) }
+    didSet { defaults.set(dictationPolishPrompt, forKey: Key.dictationPolishPrompt) }
   }
 
   /// Screen-corner placement of the floating dictation pill that shows
@@ -135,47 +122,60 @@ public final class AppSettings {
   /// `"bottomRight"`. Default `"topCenter"` — sits just under the
   /// menubar without covering app-window content on either side.
   public var dictationPillPosition: String {
-    get { defaults.string(forKey: Key.dictationPillPosition) ?? "topCenter" }
-    set { defaults.set(newValue, forKey: Key.dictationPillPosition) }
+    didSet { defaults.set(dictationPillPosition, forKey: Key.dictationPillPosition) }
   }
 
   public var dictationCalmerPrompt: String {
-    get { defaults.string(forKey: Key.dictationCalmerPrompt) ?? Self.defaultCalmerPrompt }
-    set { defaults.set(newValue, forKey: Key.dictationCalmerPrompt) }
+    didSet { defaults.set(dictationCalmerPrompt, forKey: Key.dictationCalmerPrompt) }
   }
   public var dictationEmojiPrompt: String {
-    get { defaults.string(forKey: Key.dictationEmojiPrompt) ?? Self.defaultEmojiPrompt }
-    set { defaults.set(newValue, forKey: Key.dictationEmojiPrompt) }
+    didSet { defaults.set(dictationEmojiPrompt, forKey: Key.dictationEmojiPrompt) }
   }
   public var dictationBulletsPrompt: String {
-    get { defaults.string(forKey: Key.dictationBulletsPrompt) ?? Self.defaultBulletsPrompt }
-    set { defaults.set(newValue, forKey: Key.dictationBulletsPrompt) }
+    didSet { defaults.set(dictationBulletsPrompt, forKey: Key.dictationBulletsPrompt) }
   }
   public var dictationProfessionalPrompt: String {
-    get { defaults.string(forKey: Key.dictationProfessionalPrompt) ?? Self.defaultProfessionalPrompt }
-    set { defaults.set(newValue, forKey: Key.dictationProfessionalPrompt) }
+    didSet { defaults.set(dictationProfessionalPrompt, forKey: Key.dictationProfessionalPrompt) }
   }
 
   /// User-maintained domain terms (e.g. "PADI", "SeaExplorers") that bias
   /// the Apple speech recognizer and are injected into the polish prompt.
-  /// Persisted as a newline-joined string; the getter normalises it into a
-  /// trimmed, blank-free list so consumers never see empty entries.
+  /// Stored normalised (trimmed, blank-free); `didSet` persists it as a
+  /// newline-joined string so consumers never see empty entries.
   public var customVocabulary: [String] {
-    get {
-      (defaults.string(forKey: Key.customVocabulary) ?? "")
-        .split(separator: "\n", omittingEmptySubsequences: true)
-        .map { $0.trimmingCharacters(in: .whitespaces) }
-        .filter { !$0.isEmpty }
-    }
-    set {
-      defaults.set(newValue.joined(separator: "\n"), forKey: Key.customVocabulary)
-    }
+    didSet { defaults.set(customVocabulary.joined(separator: "\n"), forKey: Key.customVocabulary) }
   }
 
   /// Which WhisperKit model the local recognizer uses. Stored as the
   /// model's catalog id. Default: Whisper Small (fastest, 216 MB).
   public var localModelName: String {
-    get { defaults.string(forKey: Key.localModelName) ?? "openai_whisper-small_216MB" }
-    set { defaults.set(newValue, forKey: Key.localModelName) }
+    didSet { defaults.set(localModelName, forKey: Key.localModelName) }
+  }
+
+  public init(defaults: UserDefaults = .standard) {
+    self.defaults = defaults
+    // Assigning in init does NOT fire didSet → no redundant write-back.
+    self.selectedModel = defaults.string(forKey: Key.selectedModel) ?? "claude-sonnet-4-6"
+    self.voiceEnabled = defaults.object(forKey: Key.voiceEnabled) as? Bool ?? true
+    self.voiceIdentifier = defaults.string(forKey: Key.voiceIdentifier) ?? "com.apple.voice.compact.de-DE.Anna"
+    self.replaceSelectionByDefault = defaults.bool(forKey: Key.replaceSelectionByDefault)
+    self.ttsProvider = defaults.string(forKey: Key.ttsProvider) ?? "apple"
+    self.elevenLabsVoiceID = defaults.string(forKey: Key.elevenLabsVoiceID) ?? "21m00Tcm4TlvDq8ikWAM"
+    self.speechRecognizer = defaults.string(forKey: Key.speechRecognizer) ?? "hybrid"
+    self.autoSendAfterPushToTalk = defaults.object(forKey: Key.autoSendAfterPushToTalk) as? Bool ?? true
+    self.dictationPolishPrompt = defaults.string(forKey: Key.dictationPolishPrompt) ?? Self.defaultPolishPrompt
+    self.dictationPillPosition = defaults.string(forKey: Key.dictationPillPosition) ?? "topCenter"
+    self.dictationCalmerPrompt = defaults.string(forKey: Key.dictationCalmerPrompt) ?? Self.defaultCalmerPrompt
+    self.dictationEmojiPrompt = defaults.string(forKey: Key.dictationEmojiPrompt) ?? Self.defaultEmojiPrompt
+    self.dictationBulletsPrompt = defaults.string(forKey: Key.dictationBulletsPrompt) ?? Self.defaultBulletsPrompt
+    self.dictationProfessionalPrompt = defaults.string(forKey: Key.dictationProfessionalPrompt) ?? Self.defaultProfessionalPrompt
+    self.customVocabulary = Self.parseVocabulary(defaults.string(forKey: Key.customVocabulary) ?? "")
+    self.localModelName = defaults.string(forKey: Key.localModelName) ?? "openai_whisper-small_216MB"
+  }
+
+  private static func parseVocabulary(_ raw: String) -> [String] {
+    raw.split(separator: "\n", omittingEmptySubsequences: true)
+      .map { $0.trimmingCharacters(in: .whitespaces) }
+      .filter { !$0.isEmpty }
   }
 }
