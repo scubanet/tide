@@ -32,9 +32,9 @@ jobs:
             echo "::endgroup::"
           done
 
-      - name: Build Tide app
+      - name: Test Tide app
         run: |
-          xcodebuild build \
+          xcodebuild test \
             -project Tide.xcodeproj \
             -scheme Tide \
             -destination "platform=macOS" \

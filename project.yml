@@ -71,3 +71,11 @@ targets:
     sources: TideTests
     dependencies:
       - target: Tide
+    settings:
+      base:
+        # Auto-generate the test bundle's Info.plist so the target can be
+        # code-signed and run via `xcodebuild test` without passing
+        # CODE_SIGNING_ALLOWED=NO. Without this xcodebuild aborts with
+        # "target does not have an Info.plist file".
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: swiss.weckherlin.tideTests
