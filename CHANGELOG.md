@@ -9,6 +9,13 @@ Aktuelle Phase: **pre-release, daily-use by author**, signiertes + notarisiertes
 
 ## [Unreleased]
 
+### Changed
+
+- **Settings als gruppierte Sidebar** — das Settings-Fenster nutzt statt der
+  überlaufenden 8-Tab-Leiste (die in ein „» Navigation Tab Bar"-Dropdown
+  klappte) eine `NavigationSplitView`-Sidebar mit Gruppen (Allgemein / Sprache
+  / Diktat / Erweitert). Alle Sektionen direkt erreichbar, skaliert beliebig.
+
 ### Added
 
 - **Artefakt-Filter** — zu kurze Aufnahmen (< 0.3s) und ASR-Halluzinationen
