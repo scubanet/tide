@@ -42,7 +42,7 @@ final class HybridRecognizerTests: XCTestCase {
   func test_hybrid_returns_elevenlabs_when_non_empty() async throws {
     let apple = StubRecognizer(final: "Apple-Text")
     let eleven = StubRecognizer(final: "ElevenLabs-Text")
-    let hybrid = HybridRecognizer(apple: apple, eleven: eleven)
+    let hybrid = HybridRecognizer(apple: apple, secondary: eleven)
 
     try await hybrid.start()
     let result = try await hybrid.stop()
@@ -57,7 +57,7 @@ final class HybridRecognizerTests: XCTestCase {
   func test_hybrid_falls_back_to_apple_when_elevenlabs_empty() async throws {
     let apple = StubRecognizer(final: "Apple-Final")
     let eleven = StubRecognizer(final: "")  // simulates Scribe failure
-    let hybrid = HybridRecognizer(apple: apple, eleven: eleven)
+    let hybrid = HybridRecognizer(apple: apple, secondary: eleven)
 
     try await hybrid.start()
     let result = try await hybrid.stop()
@@ -68,7 +68,7 @@ final class HybridRecognizerTests: XCTestCase {
   func test_hybrid_starts_both_recognizers() async throws {
     let apple = StubRecognizer(final: "x")
     let eleven = StubRecognizer(final: "y")
-    let hybrid = HybridRecognizer(apple: apple, eleven: eleven)
+    let hybrid = HybridRecognizer(apple: apple, secondary: eleven)
 
     try await hybrid.start()
     defer { Task { _ = try? await hybrid.stop() } }
@@ -80,7 +80,7 @@ final class HybridRecognizerTests: XCTestCase {
   func test_hybrid_fans_feed_to_both_recognizers() async throws {
     let apple = StubRecognizer(final: "a")
     let eleven = StubRecognizer(final: "b")
-    let hybrid = HybridRecognizer(apple: apple, eleven: eleven)
+    let hybrid = HybridRecognizer(apple: apple, secondary: eleven)
 
     try await hybrid.start()
     let format = AVAudioFormat(
@@ -105,7 +105,7 @@ final class HybridRecognizerTests: XCTestCase {
   func test_hybrid_forwards_apple_partials() async throws {
     let apple = StubRecognizer(final: "Live-Partial-Text")
     let eleven = StubRecognizer(final: "Final-Replace")
-    let hybrid = HybridRecognizer(apple: apple, eleven: eleven)
+    let hybrid = HybridRecognizer(apple: apple, secondary: eleven)
 
     // Subscribe to the hybrid's partial stream BEFORE starting, so we
     // don't miss the yield from Apple's start().
