@@ -11,8 +11,6 @@ import Core
 struct DictationSection: View {
   @State private var settings = AppSettings()
   @State private var selectedMode: PromptMode = .polished
-  @State private var promptText: String = ""
-  @State private var pillPosition: String = "topCenter"
 
   /// The prompt-bearing modes (everything except raw).
   enum PromptMode: String, CaseIterable, Identifiable {
@@ -38,27 +36,19 @@ struct DictationSection: View {
     }
   }
 
-  private func currentPrompt(_ mode: PromptMode) -> String {
+  /// A binding to the `AppSettings` prompt backing the given mode.
+  private func promptBinding(for mode: PromptMode) -> Binding<String> {
     switch mode {
-    case .polished:     settings.dictationPolishPrompt
-    case .calmer:       settings.dictationCalmerPrompt
-    case .emoji:        settings.dictationEmojiPrompt
-    case .bullets:      settings.dictationBulletsPrompt
-    case .professional: settings.dictationProfessionalPrompt
-    }
-  }
-
-  private func setPrompt(_ mode: PromptMode, _ value: String) {
-    switch mode {
-    case .polished:     settings.dictationPolishPrompt = value
-    case .calmer:       settings.dictationCalmerPrompt = value
-    case .emoji:        settings.dictationEmojiPrompt = value
-    case .bullets:      settings.dictationBulletsPrompt = value
-    case .professional: settings.dictationProfessionalPrompt = value
+    case .polished:     Binding(get: { settings.dictationPolishPrompt }, set: { settings.dictationPolishPrompt = $0 })
+    case .calmer:       Binding(get: { settings.dictationCalmerPrompt }, set: { settings.dictationCalmerPrompt = $0 })
+    case .emoji:        Binding(get: { settings.dictationEmojiPrompt }, set: { settings.dictationEmojiPrompt = $0 })
+    case .bullets:      Binding(get: { settings.dictationBulletsPrompt }, set: { settings.dictationBulletsPrompt = $0 })
+    case .professional: Binding(get: { settings.dictationProfessionalPrompt }, set: { settings.dictationProfessionalPrompt = $0 })
     }
   }
 
   var body: some View {
+    @Bindable var settings = settings
     Form {
       Section {
         Picker("Modus:", selection: $selectedMode) {
@@ -67,9 +57,6 @@ struct DictationSection: View {
           }
         }
         .pickerStyle(.menu)
-        .onChange(of: selectedMode) { _, newMode in
-          promptText = currentPrompt(newMode)
-        }
 
         Text("System-Prompt für den gewählten Transform-Modus. Wird vor "
           + "jeder Sitzung dieses Modus an Claude gesendet; der Rohtext "
@@ -77,21 +64,17 @@ struct DictationSection: View {
           .font(.caption)
           .foregroundStyle(.secondary)
 
-        TextEditor(text: $promptText)
+        TextEditor(text: promptBinding(for: selectedMode))
           .font(.system(size: 12, design: .monospaced))
           .frame(minHeight: 120)
           .overlay(
             RoundedRectangle(cornerRadius: 4)
               .stroke(Color.gray.opacity(0.3), lineWidth: 1)
           )
-          .onChange(of: promptText) { _, newValue in
-            setPrompt(selectedMode, newValue)
-          }
 
         HStack {
           Button("Standard wiederherstellen") {
-            promptText = selectedMode.default
-            setPrompt(selectedMode, selectedMode.default)
+            promptBinding(for: selectedMode).wrappedValue = selectedMode.default
           }
           .controlSize(.small)
           Spacer()
@@ -99,15 +82,12 @@ struct DictationSection: View {
       } header: { Text("Transform-Prompts") }
 
       Section {
-        Picker("Position:", selection: $pillPosition) {
+        Picker("Position:", selection: $settings.dictationPillPosition) {
           Text("Oben Mitte").tag("topCenter")
           Text("Oben Rechts").tag("topRight")
           Text("Unten Rechts").tag("bottomRight")
         }
         .pickerStyle(.menu)
-        .onChange(of: pillPosition) { _, newValue in
-          settings.dictationPillPosition = newValue
-        }
 
         Text("Wo erscheint die kleine Aufnahme-Pille während des Diktats.")
           .font(.caption)
@@ -115,9 +95,5 @@ struct DictationSection: View {
       } header: { Text("Aufnahme-Pille") }
     }
     .formStyle(.grouped)
-    .task {
-      promptText = currentPrompt(selectedMode)
-      pillPosition = settings.dictationPillPosition
-    }
   }
 }
