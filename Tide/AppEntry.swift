@@ -59,7 +59,8 @@ final class TideAppDelegate: NSObject, NSApplicationDelegate {
         let localStore = WhisperModelStore()
         let transcriber = WhisperKitTranscriber(store: localStore)
         LocalTranscriberHolder.shared.transcriber = transcriber
-        if settings.speechRecognizer == SpeechRecognizerChoice.whisperKit.rawValue,
+        let localChoice = SpeechRecognizerChoice(rawValue: settings.speechRecognizer)
+        if (localChoice == .whisperKit || localChoice == .hybridLocal),
            localStore.isInstalled(settings.localModelName) {
           let modelName = settings.localModelName
           Task.detached { try? await transcriber.prewarm(modelName: modelName) }
