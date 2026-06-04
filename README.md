@@ -65,7 +65,8 @@ Siehe [CHANGELOG.md](CHANGELOG.md) für Versions-History. Nächste Wellen:
 | 6 | Diktat-Transform-Modi (Calmer/Emoji/Bullets/Professional) | ✅ |
 | 7 | Settings-Sidebar | ✅ |
 | 8 | Distribution (DMG, Notarization, GitHub-Releases via Sparkle) | 🔜 |
-| 9 | Onboarding-Flow + Crash-Reporting | 🔜 |
+| 9 | Onboarding-Wizard (First-Run-Setup) | ✅ |
+| 10 | Crash-Reporting | 🔜 |
 
 ## Anforderungen
 
