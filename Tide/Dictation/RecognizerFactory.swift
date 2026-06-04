@@ -16,6 +16,8 @@ import TideSpeech
 ///   `AudioBufferAccumulator` is `@unchecked Sendable` (internal NSLock),
 ///   safe to read from any thread.
 /// - Hybrid: composes Apple (live partials) + ElevenLabs (final replace).
+/// - HybridLocal: composes Apple (live partials) + WhisperKit (offline final
+///   replace). Falls back to Apple when no local model is installed.
 ///
 /// Fallback: if a non-Apple choice is selected but no API key is set,
 /// silently fall back to Apple. The Settings-Picker enforces the key
@@ -47,16 +49,17 @@ enum RecognizerFactory {
     // Local WhisperKit: only when a model is installed AND the shared
     // transcriber exists. Otherwise fall back to Apple (logged), so a
     // user who picked Local but hasn't downloaded a model still dictates.
-    if choice == .whisperKit {
-      if localModelInstalled, let transcriber {
-        return WhisperKitRecognizer(
-          transcriber: transcriber,
-          modelName: localModelName,
-          bufferProvider: { accumulator.exportWAV(sampleRate: 16000, channels: 1) },
-          language: nil
-        )
-      }
-      return apple
+    if choice == .whisperKit || choice == .hybridLocal {
+      guard localModelInstalled, let transcriber else { return apple }
+      let whisper = WhisperKitRecognizer(
+        transcriber: transcriber,
+        modelName: localModelName,
+        bufferProvider: { accumulator.exportWAV(sampleRate: 16000, channels: 1) },
+        language: nil
+      )
+      return choice == .hybridLocal
+        ? HybridRecognizer(apple: apple, secondary: whisper)
+        : whisper
     }
 
     guard choice != .apple, let key = apiKey, !key.isEmpty else {
@@ -75,8 +78,8 @@ enum RecognizerFactory {
     case .elevenLabs:
       return elevenRecognizer
     case .hybrid:
-      return HybridRecognizer(apple: apple, eleven: elevenRecognizer)
-    case .apple, .whisperKit:
+      return HybridRecognizer(apple: apple, secondary: elevenRecognizer)
+    case .apple, .whisperKit, .hybridLocal:
       return apple
     }
   }
