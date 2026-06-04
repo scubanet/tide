@@ -22,7 +22,9 @@ enum AnthropicRequestBuilder {
       "model": model,
       "max_tokens": 4096,
       "stream": true,
-      "messages": messages.map { ["role": $0.role.rawValue, "content": $0.content] },
+      "messages": messages
+        .filter { $0.role == .user || $0.role == .assistant }
+        .map { ["role": $0.role.rawValue, "content": $0.content] },
     ]
     if let systemPrompt {
       body["system"] = systemPrompt
