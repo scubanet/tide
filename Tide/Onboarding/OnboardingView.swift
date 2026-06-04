@@ -33,6 +33,8 @@ struct OnboardingView: View {
             .frame(width: 7, height: 7)
         }
       }
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel("Schritt \(step.index + 1) von \(OnboardingStep.count)")
     }
   }
 

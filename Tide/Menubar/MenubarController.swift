@@ -12,12 +12,24 @@ final class MenubarController {
   let chatViewModel: ChatViewModel
   private var settingsWindow: NSWindow?
   private var onboardingWindow: NSWindow?
+  /// Token for the `.tideOpenOnboarding` observer, removed in `deinit` so a
+  /// re-created controller never accumulates duplicate registrations.
+  /// `nonisolated(unsafe)` so the nonisolated `deinit` can read it — the
+  /// token is only ever written once (in `init`) and `removeObserver` is
+  /// thread-safe, so there is no real data race.
+  private nonisolated(unsafe) var onboardingObserver: NSObjectProtocol?
 
   /// Exposes the underlying `NSStatusItem` so the dictation coordinator
   /// can wire a `DictationIndicator` against the same status-bar button
   /// (Welle 4). Read-only — only `MenubarController` mutates the item's
   /// configuration.
   var menubarStatusItem: NSStatusItem { statusItem }
+
+  deinit {
+    if let onboardingObserver {
+      NotificationCenter.default.removeObserver(onboardingObserver)
+    }
+  }
 
   init(
     conversationStore: ConversationStore,
@@ -70,7 +82,7 @@ final class MenubarController {
       onOpenSettings: { [weak self] in self?.openSettings() }
     )
     panel.contentViewController = NSHostingController(rootView: view)
-    NotificationCenter.default.addObserver(
+    onboardingObserver = NotificationCenter.default.addObserver(
       forName: .tideOpenOnboarding, object: nil, queue: .main
     ) { [weak self] _ in
       Task { @MainActor in self?.openOnboarding() }
