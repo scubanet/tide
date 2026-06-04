@@ -15,7 +15,9 @@ struct MessageList: View {
               // Hide panel so the previous app regains focus, then paste.
               NSApp.hide(nil)
               DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                SelectionReplacer.replaceSelection(with: text)
+                Task { @MainActor in
+                  SelectionReplacer.replaceSelection(with: text)
+                }
               }
             })
             .id(msg.id)

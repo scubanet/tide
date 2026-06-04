@@ -1,17 +1,13 @@
 import AppKit
 
-/// Writes text back into the previous app's selection by swapping the
-/// pasteboard, simulating ⌘V, and restoring the original clipboard.
-///
-/// The mechanical paste sequence (pasteboard swap + synthetic ⌘V +
-/// restore) lives in `ClipboardPaste`; this enum keeps the
-/// selection-replacement-shaped public API the rest of the app uses.
+/// Writes text back into the previous app's selection via `ClipboardPaste`.
 public enum SelectionReplacer {
-  /// Replaces the current frontmost app's selection with `text`, then
-  /// restores the original clipboard contents after a short delay.
-  /// Caller is responsible for first calling `NSApp.hide(nil)` or
-  /// otherwise yielding focus before invoking this.
+  /// Replaces the frontmost app's selection with `text`. Fire-and-forget:
+  /// the async paste runs on the main actor; the result isn't awaited
+  /// (replacement is best-effort and restores the clipboard either way).
+  /// Caller must yield focus (e.g. `NSApp.hide`) first.
+  @MainActor
   public static func replaceSelection(with newText: String) {
-    ClipboardPaste.paste(newText)
+    Task { @MainActor in _ = await ClipboardPaste.paste(newText) }
   }
 }

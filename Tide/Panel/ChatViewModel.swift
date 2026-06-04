@@ -249,11 +249,13 @@ final class ChatViewModel {
     isRecording = true
 
     // Subscribe to partial transcripts so the UI can show the live text.
+    // Bind the stream before the Task so the Task iterates `stream` rather
+    // than strongly capturing `recorder`. The class is @MainActor, so the
+    // `for await` body resumes on the main actor — no MainActor.run hop.
+    let stream = recorder.partialTranscript
     partialTask = Task { [weak self] in
-      for await partial in recorder.partialTranscript {
-        await MainActor.run {
-          self?.liveTranscript = partial
-        }
+      for await partial in stream {
+        self?.liveTranscript = partial
       }
     }
 
@@ -261,8 +263,9 @@ final class ChatViewModel {
       try await recorder.start()
     } catch {
       isRecording = false
-      self.recorder = nil
       partialTask?.cancel()
+      self.recorder = nil
+      liveTranscript = ""
     }
   }
 

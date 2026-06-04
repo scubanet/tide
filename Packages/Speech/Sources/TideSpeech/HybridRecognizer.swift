@@ -24,6 +24,7 @@ public final class HybridRecognizer: SpeechRecognizer, @unchecked Sendable {
   public let partialTranscript: AsyncStream<String>
 
   private var forwardTask: Task<Void, Never>?
+  private let lock = NSLock()
 
   private static let logger = Logger(
     subsystem: "swiss.weckherlin.tide",
@@ -47,11 +48,12 @@ public final class HybridRecognizer: SpeechRecognizer, @unchecked Sendable {
     // Forward Apple's live partials to our own stream.
     let appleStream = apple.partialTranscript
     let cont = partialContinuation
-    forwardTask = Task {
+    let task = Task {
       for await text in appleStream {
         cont.yield(text)
       }
     }
+    lock.withLock { forwardTask = task }
   }
 
   public func feed(_ buffer: AVAudioPCMBuffer) {
@@ -60,11 +62,17 @@ public final class HybridRecognizer: SpeechRecognizer, @unchecked Sendable {
   }
 
   public func stop() async throws -> String {
+    // Cancel + clear the forward task BEFORE awaiting the recognizers'
+    // stop(), so a late Apple partial can't race into the stream we're
+    // about to finish. `cancel()` is synchronous, so doing it inside
+    // withLock is safe (no await held under the lock).
+    lock.withLock {
+      forwardTask?.cancel()
+      forwardTask = nil
+    }
+
     let appleFinal = (try? await apple.stop()) ?? ""
     let secondaryFinal = (try? await secondary.stop()) ?? ""
-
-    forwardTask?.cancel()
-    forwardTask = nil
     partialContinuation.finish()
 
     if secondaryFinal.isEmpty {

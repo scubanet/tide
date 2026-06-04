@@ -9,6 +9,18 @@ Aktuelle Phase: **pre-release, daily-use by author**, signiertes + notarisiertes
 
 ## [Unreleased]
 
+### Fixed
+
+- **Diktat-Paste zuverlässig** — das synthetische ⌘V wurde gehärtet (Modifier-
+  Flag + Inter-Event-Gaps), sodass der Text nicht mehr intermittierend „im
+  Nirvana" verschwindet (vor allem im Release-Build). Fehlt das
+  Bedienungshilfen-Recht, landet der Text sichtbar in der Zwischenablage mit
+  Hinweis statt stillem Fehlschlag.
+- **Diktat-Concurrency** — Daten-Race in `AppleSpeechRecognizer`, steckenge-
+  bliebene Aufnahmen bei schnellem Hotkey-Tap, Recorder-Leak bei Start-Fehler,
+  Pillen-Flacker-Races, ElevenLabs-TTS-Reihenfolge und ein Recorder-Retain im
+  Panel-Pfad behoben (aus dem App-Audit).
+
 ### Added
 
 - **Onboarding-Wizard** — beim ersten Start (kein Anthropic-Key) führt ein
