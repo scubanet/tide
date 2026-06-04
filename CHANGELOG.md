@@ -33,6 +33,11 @@ Aktuelle Phase: **pre-release, daily-use by author**, signiertes + notarisiertes
   (Settings → Hotkey) mit editierbarem Prompt (Settings → Diktat, Modus-Picker).
   Laufen über denselben Claude-Pfad wie Polished. Inspiriert von Blitztexts
   Workflow-Personalities.
+- **Hybrid-Lokal-Recognizer** — neue Recognizer-Wahl „Hybrid Lokal (Apple live
+  + WhisperKit final)": Apple liefert sofortige Live-Partials, WhisperKit
+  ersetzt am Ende mit der lokalen, offline-genauen Transkription. Kombiniert
+  Live-Vorschau mit privater On-Device-Genauigkeit. Fällt auf Apple zurück,
+  wenn kein lokales Modell installiert ist.
 
 ---
 
