@@ -16,6 +16,8 @@ import TideSpeech
 ///   `AudioBufferAccumulator` is `@unchecked Sendable` (internal NSLock),
 ///   safe to read from any thread.
 /// - Hybrid: composes Apple (live partials) + ElevenLabs (final replace).
+/// - HybridLocal: composes Apple (live partials) + WhisperKit (offline final
+///   replace). Falls back to Apple when no local model is installed.
 ///
 /// Fallback: if a non-Apple choice is selected but no API key is set,
 /// silently fall back to Apple. The Settings-Picker enforces the key

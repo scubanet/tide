@@ -56,7 +56,7 @@ final class HybridRecognizerTests: XCTestCase {
 
   func test_hybrid_falls_back_to_apple_when_elevenlabs_empty() async throws {
     let apple = StubRecognizer(final: "Apple-Final")
-    let eleven = StubRecognizer(final: "")  // simulates Scribe failure
+    let eleven = StubRecognizer(final: "")  // simulates secondary failure
     let hybrid = HybridRecognizer(apple: apple, secondary: eleven)
 
     try await hybrid.start()
