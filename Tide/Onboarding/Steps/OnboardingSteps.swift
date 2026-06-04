@@ -118,32 +118,28 @@ struct HotkeyStep: View {
 
 struct VoiceStep: View {
   @State private var settings = AppSettings()
-  @State private var recognizer: SpeechRecognizerChoice = .default
-  @State private var tts: String = "apple"
 
   var body: some View {
+    @Bindable var settings = settings
     VStack(alignment: .leading, spacing: 14) {
-      Picker("Spracherkennung:", selection: $recognizer) {
+      Picker("Spracherkennung:", selection: Binding(
+        get: { SpeechRecognizerChoice(rawValue: settings.speechRecognizer) ?? .default },
+        set: { settings.speechRecognizer = $0.rawValue }
+      )) {
         ForEach(SpeechRecognizerChoice.allCases, id: \.self) { c in
           Text(c.displayName).tag(c)
         }
       }
-      .onChange(of: recognizer) { _, v in settings.speechRecognizer = v.rawValue }
 
-      Picker("Vorlese-Stimme:", selection: $tts) {
+      Picker("Vorlese-Stimme:", selection: $settings.ttsProvider) {
         Text("Apple (System)").tag("apple")
         Text("ElevenLabs (Cloud)").tag("elevenLabs")
       }
       .pickerStyle(.segmented)
-      .onChange(of: tts) { _, v in settings.ttsProvider = v }
 
       Text("ElevenLabs- und lokale-Modell-Details richtest du in "
         + "Einstellungen → Sprache ein.")
         .font(.caption).foregroundStyle(.secondary)
-    }
-    .task {
-      recognizer = SpeechRecognizerChoice(rawValue: settings.speechRecognizer) ?? .default
-      tts = settings.ttsProvider
     }
   }
 }
