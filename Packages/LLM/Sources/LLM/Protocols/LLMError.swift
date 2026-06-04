@@ -15,3 +15,20 @@ public enum LLMError: Error, Sendable, Equatable {
   /// Body could not be decoded as expected.
   case decoding(String)
 }
+
+extension LLMError: LocalizedError {
+  public var errorDescription: String? {
+    switch self {
+    case .network(let m):
+      "Netzwerkfehler: \(m)"
+    case .unauthorized:
+      "API-Key ungültig oder abgelaufen (401)."
+    case .rateLimit(let s):
+      "Rate-Limit erreicht — in \(s)s erneut versuchen (429)."
+    case .serverError(let code, let m):
+      code > 0 ? "Server-Fehler \(code): \(m)" : "Stream-Fehler: \(m)"
+    case .decoding(let m):
+      "Antwort nicht lesbar: \(m)"
+    }
+  }
+}

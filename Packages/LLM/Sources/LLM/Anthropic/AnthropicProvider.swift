@@ -37,7 +37,11 @@ public final class AnthropicProvider: LLMProvider {
             let retry = Int(http.value(forHTTPHeaderField: "retry-after") ?? "10") ?? 10
             throw LLMError.rateLimit(retryAfterSeconds: retry)
           default:
-            throw LLMError.serverError(code: http.statusCode, message: "")
+            let body = await Self.drainBody(bytes)
+            throw LLMError.serverError(
+              code: http.statusCode,
+              message: Self.errorMessage(fromBody: body) ?? ""
+            )
           }
 
           // SSE-framing note: we cannot use `bytes.lines` here because
@@ -54,9 +58,7 @@ public final class AnthropicProvider: LLMProvider {
               guard let blockStr = String(data: blockData, encoding: .utf8) else { continue }
               let events = SSEParser.parse(blockStr)
               for event in events {
-                if let chunk = decodeChunk(event: event) {
-                  continuation.yield(chunk)
-                }
+                try handle(event, into: continuation)
               }
             }
           }
@@ -67,9 +69,7 @@ public final class AnthropicProvider: LLMProvider {
           if !buffer.isEmpty, let tail = String(data: buffer, encoding: .utf8) {
             let events = SSEParser.parse(tail)
             for event in events {
-              if let chunk = decodeChunk(event: event) {
-                continuation.yield(chunk)
-              }
+              try handle(event, into: continuation)
             }
           }
           continuation.finish()
@@ -79,6 +79,46 @@ public final class AnthropicProvider: LLMProvider {
       }
       continuation.onTermination = { _ in task.cancel() }
     }
+  }
+
+  /// Process one parsed SSE event: throw on an Anthropic `error` event,
+  /// otherwise yield the decoded chunk (if any).
+  private func handle(_ event: SSEEvent, into continuation: AsyncThrowingStream<LLMChunk, Error>.Continuation) throws {
+    if event.event == "error" {
+      let msg = Self.errorMessage(fromEventData: event.data) ?? "stream error"
+      throw LLMError.serverError(code: 0, message: msg)
+    }
+    if let chunk = decodeChunk(event: event) {
+      continuation.yield(chunk)
+    }
+  }
+
+  /// Collect the full response body from a streaming `AsyncBytes`.
+  private static func drainBody(_ bytes: URLSession.AsyncBytes) async -> Data {
+    do {
+      var data = Data()
+      for try await b in bytes { data.append(b) }
+      return data
+    } catch {
+      return Data()
+    }
+  }
+
+  /// Extract `error.message` (prefixed with `error.type` when present) from
+  /// an Anthropic error JSON body.
+  private static func errorMessage(fromBody data: Data) -> String? {
+    guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let err = json["error"] as? [String: Any] else { return nil }
+    let message = err["message"] as? String ?? ""
+    let type = err["type"] as? String
+    if let type, !type.isEmpty { return message.isEmpty ? type : "\(type): \(message)" }
+    return message.isEmpty ? nil : message
+  }
+
+  /// Same shape, from an SSE event's `data:` string.
+  private static func errorMessage(fromEventData data: String) -> String? {
+    guard let d = data.data(using: .utf8) else { return nil }
+    return errorMessage(fromBody: d)
   }
 
   private func decodeChunk(event: SSEEvent) -> LLMChunk? {
