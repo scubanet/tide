@@ -21,6 +21,11 @@ public enum ClipboardPaste {
     let ok = await postCommandV()
     log.debug("ClipboardPaste ⌘V posted=\(ok, privacy: .public) (\(text.count, privacy: .public) chars)")
 
+    // Only restore if the ⌘V was actually posted. If event creation
+    // failed, the caller falls back to "text on clipboard, press ⌘V" —
+    // restoring would wipe that text out from under the user.
+    guard ok else { return false }
+
     // Restore after the target app has had time to consume the paste.
     // Electron/WebKit hosts read the pasteboard asynchronously; 800ms is
     // comfortably past their read window.
@@ -29,7 +34,7 @@ public enum ClipboardPaste {
       pasteboard.clearContents()
       if let old = oldContents { pasteboard.setString(old, forType: .string) }
     }
-    return ok
+    return true
   }
 
   /// Post ⌘V as four events with a small inter-event gap so the ⌘

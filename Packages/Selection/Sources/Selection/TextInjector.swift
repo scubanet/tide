@@ -107,7 +107,7 @@ public enum TextInjector {
         return .clipboardPaste
       }
       log.debug("insert: AX untrusted or ⌘V failed — pasteboard-only fallback")
-      // fall through to strategy 3 below
+      // Pasteboard-only: leave the text on the clipboard + notify, then return.
       let pasteboard = NSPasteboard.general
       pasteboard.clearContents()
       pasteboard.setString(trimmed, forType: .string)
