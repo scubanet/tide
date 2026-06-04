@@ -47,7 +47,8 @@ public enum SelectionReader {
     let focusStatus = AXUIElementCopyAttributeValue(
       appElement, kAXFocusedUIElementAttribute as CFString, &focused
     )
-    guard focusStatus == .success, let focused = focused else { return nil }
+    guard focusStatus == .success, let focused,
+          CFGetTypeID(focused) == AXUIElementGetTypeID() else { return nil }
     let focusedElement = focused as! AXUIElement
     var value: CFTypeRef?
     let valueStatus = AXUIElementCopyAttributeValue(
@@ -103,18 +104,25 @@ public enum SelectionReader {
   /// Posts a ⌘C key combination to the frontmost app via CGEvents.
   private static func sendCommandC() {
     let source = CGEventSource(stateID: .combinedSessionState)
-    let cKeyCode: CGKeyCode = 0x08  // 'c'
-    let cmdDown = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: true)
-    let cDown = CGEvent(keyboardEventSource: source, virtualKey: cKeyCode, keyDown: true)
-    cDown?.flags = .maskCommand
-    let cUp = CGEvent(keyboardEventSource: source, virtualKey: cKeyCode, keyDown: false)
-    cUp?.flags = .maskCommand
-    let cmdUp = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: false)
-
-    cmdDown?.post(tap: .cghidEventTap)
-    cDown?.post(tap: .cghidEventTap)
-    cUp?.post(tap: .cghidEventTap)
-    cmdUp?.post(tap: .cghidEventTap)
+    let cKey: CGKeyCode = 0x08
+    let cmdKey: CGKeyCode = 0x37
+    guard
+      let cmdDown = CGEvent(keyboardEventSource: source, virtualKey: cmdKey, keyDown: true),
+      let cDown = CGEvent(keyboardEventSource: source, virtualKey: cKey, keyDown: true),
+      let cUp = CGEvent(keyboardEventSource: source, virtualKey: cKey, keyDown: false),
+      let cmdUp = CGEvent(keyboardEventSource: source, virtualKey: cmdKey, keyDown: false)
+    else { return }
+    cmdDown.flags = .maskCommand
+    cDown.flags = .maskCommand
+    cUp.flags = .maskCommand
+    cmdUp.flags = []
+    cmdDown.post(tap: .cghidEventTap)
+    usleep(8_000)
+    cDown.post(tap: .cghidEventTap)
+    usleep(8_000)
+    cUp.post(tap: .cghidEventTap)
+    usleep(8_000)
+    cmdUp.post(tap: .cghidEventTap)
   }
 
   /// Prompt macOS to ask the user for Accessibility permission. Safe to

@@ -75,6 +75,11 @@ public enum TextInjector {
   /// real macOS permission prompt while the suite runs.
   nonisolated(unsafe) static var _notificationsEnabled: Bool = true
 
+  /// Test seam — overridable in unit tests. Default reads the real AX
+  /// trust state. `nonisolated(unsafe)`: only read/written on the main
+  /// actor (insert is `@MainActor`, tests run `@MainActor`).
+  nonisolated(unsafe) static var _isProcessTrusted: () -> Bool = { AXIsProcessTrusted() }
+
   /// Insert `text` at the frontmost app's cursor using the best
   /// available strategy. Returns the strategy that succeeded
   /// (or `.skippedEmpty` / `.pasteboardOnly` on full fall-through).
@@ -94,9 +99,20 @@ public enum TextInjector {
     // Electron, WKWebView, terminals — anywhere the user can normally
     // paste.
     if let front = frontBundle, front != tideBundle {
-      ClipboardPaste.paste(trimmed)
-      log.debug("insert via clipboard-paste into \(front, privacy: .public) (\(trimmed.count, privacy: .public) chars)")
-      return .clipboardPaste
+      // ⌘V is delivered via CGEvent, which requires Accessibility trust.
+      // Untrusted → the keystroke is silently dropped, so don't claim
+      // success: fall through to pasteboard-only + a notification.
+      if _isProcessTrusted(), await ClipboardPaste.paste(trimmed) {
+        log.debug("insert via clipboard-paste into \(front, privacy: .public) (\(trimmed.count, privacy: .public) chars)")
+        return .clipboardPaste
+      }
+      log.debug("insert: AX untrusted or ⌘V failed — pasteboard-only fallback")
+      // fall through to strategy 3 below
+      let pasteboard = NSPasteboard.general
+      pasteboard.clearContents()
+      pasteboard.setString(trimmed, forType: .string)
+      await postPasteboardNotification()
+      return .pasteboardOnly
     }
 
     // Strategy 2: AX-Insert — only reached when Tide itself is the
@@ -144,7 +160,8 @@ public enum TextInjector {
     let focusStatus = AXUIElementCopyAttributeValue(
       appElement, kAXFocusedUIElementAttribute as CFString, &focused
     )
-    guard focusStatus == .success, let focused = focused else {
+    guard focusStatus == .success, let focused,
+          CFGetTypeID(focused) == AXUIElementGetTypeID() else {
       log.debug("AX-Insert: no focused element")
       return false
     }

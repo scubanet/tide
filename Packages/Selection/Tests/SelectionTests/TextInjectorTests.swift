@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import XCTest
 @testable import Selection
 
@@ -25,12 +26,20 @@ import XCTest
 final class TextInjectorTests: XCTestCase {
   private var originalFrontmostBundleID: (() -> String?)!
   private var originalFrontmostPID: (() -> pid_t?)!
+  private var originalIsProcessTrusted: (() -> Bool)!
   private var savedClipboard: String?
 
   override func setUp() {
     super.setUp()
     originalFrontmostBundleID = TextInjector._frontmostBundleID
     originalFrontmostPID = TextInjector._frontmostPID
+    originalIsProcessTrusted = TextInjector._isProcessTrusted
+    // xctest hosts are normally not AX-trusted, which would force the
+    // clipboard-paste strategy to fall back to pasteboard-only. Stub it
+    // to trusted so the existing `.clipboardPaste` strategy-selection
+    // tests still exercise that branch; the untrusted-fallback test
+    // overrides this to `{ false }` explicitly.
+    TextInjector._isProcessTrusted = { true }
     // Force the AX strategy to bail out fast in unit tests — return
     // nil PID so attemptAXInsert short-circuits without touching real
     // AX. (AXIsProcessTrusted() in xctest hosts is normally false too,
@@ -46,6 +55,7 @@ final class TextInjectorTests: XCTestCase {
   override func tearDown() {
     TextInjector._frontmostBundleID = originalFrontmostBundleID
     TextInjector._frontmostPID = originalFrontmostPID
+    TextInjector._isProcessTrusted = originalIsProcessTrusted
     TextInjector._notificationsEnabled = true
     // Restore the developer's clipboard so running the test suite
     // doesn't trample their pasteboard.
@@ -120,5 +130,21 @@ final class TextInjectorTests: XCTestCase {
     let result = await TextInjector.insert("  Hello world  ")
     XCTAssertEqual(result, .clipboardPaste)
     XCTAssertEqual(NSPasteboard.general.string(forType: .string), "Hello world")
+  }
+
+  // MARK: - AX-trust guard
+
+  @MainActor
+  func test_insert_untrustedAX_fallsBackToPasteboardOnly() async {
+    TextInjector._notificationsEnabled = false
+    TextInjector._isProcessTrusted = { false }
+    TextInjector._frontmostBundleID = { "com.example.other" }   // non-Tide frontmost
+    defer {
+      TextInjector._isProcessTrusted = { AXIsProcessTrusted() }
+      TextInjector._frontmostBundleID = { NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
+    }
+    let result = await TextInjector.insert("hallo welt")
+    XCTAssertEqual(result, .pasteboardOnly)
+    XCTAssertEqual(NSPasteboard.general.string(forType: .string), "hallo welt")
   }
 }
