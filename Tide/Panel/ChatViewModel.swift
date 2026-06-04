@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 import Core
 import LLM
 import TideSpeech
@@ -11,6 +12,8 @@ final class ChatViewModel {
   let conversationStore: ConversationStore
   private let provider: any LLMProvider
   private let settings: AppSettings
+
+  private static let log = Logger(subsystem: "swiss.weckherlin.tide", category: "chat")
 
   var messages: [Message] = []
   var input: String = ""
@@ -126,11 +129,13 @@ final class ChatViewModel {
     // Clear pendingSelection after composing — single-shot semantic.
     pendingSelection = nil
 
-    try? conversationStore.append(userMsg, to: conv)
+    do { try conversationStore.append(userMsg, to: conv) }
+    catch { Self.log.warning("append user message failed: \(error.localizedDescription, privacy: .public)") }
     messages.append(userMsg)
 
     let assistantMsg = Message(role: .assistant, content: "")
-    try? conversationStore.append(assistantMsg, to: conv)
+    do { try conversationStore.append(assistantMsg, to: conv) }
+    catch { Self.log.warning("append assistant message failed: \(error.localizedDescription, privacy: .public)") }
     messages.append(assistantMsg)
 
     isStreaming = true
@@ -186,7 +191,8 @@ final class ChatViewModel {
         synthesizer.speak(pendingForTTS)
       }
       pendingForTTS = ""
-      try? conversationStore.append(assistantMsg, to: conv)
+      do { try conversationStore.append(assistantMsg, to: conv) }
+      catch { Self.log.warning("persist assistant message failed: \(error.localizedDescription, privacy: .public)") }
     } catch {
       assistantMsg.content += "\n\n[Fehler: \(error.localizedDescription)]"
       messages = messages.map { $0 }
@@ -198,7 +204,8 @@ final class ChatViewModel {
 
   func startNew() {
     synthesizer.stop()
-    _ = try? conversationStore.startNew()
+    do { _ = try conversationStore.startNew() }
+    catch { Self.log.warning("startNew failed: \(error.localizedDescription, privacy: .public)") }
     messages = []
     pendingSelection = nil
     selectedActionSlug = nil

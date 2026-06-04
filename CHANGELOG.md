@@ -25,6 +25,11 @@ Aktuelle Phase: **pre-release, daily-use by author**, signiertes + notarisiertes
   statt still abzuschneiden, HTTP-Fehler zeigen die echte Server-Meldung, und
   der Chat-Fehler-Text ist dank `LLMError: LocalizedError` aussagekräftig. Plus
   ein defensiver Role-Guard (nur user/assistant im `messages`-Array).
+- **Fehler-Sichtbarkeit** — still verschluckte Fehler werden jetzt geloggt:
+  `KeychainHelper` unterscheidet „Key nicht vorhanden" von echten Keychain-
+  Fehlern (ein gesperrter Keychain sieht nicht mehr wie „kein Key" aus),
+  `delete` prüft den Status, und Konversations-Persistenz-Fehler (Fetch/Append)
+  landen im Log statt stillschweigend History zu verlieren.
 
 ### Added
 
