@@ -24,6 +24,11 @@ public final class ElevenLabsSynthesizer: NSObject, Synthesizer, @unchecked Send
   private var pendingAudio: [Int: Data] = [:]
   private var nextSequence: Int = 0
   private var nextToEnqueue: Int = 0
+  // Epoch token: bumped on every stop(). Arrivals captured during an older
+  // cycle compare their captured generation against the current one and
+  // drop themselves if stale, so a late TTS response can't leak into a
+  // freshly-reset queue.
+  private var generation: Int = 0
   private var currentPlayer: AVAudioPlayer?
 
   public init(client: ElevenLabsClient, defaultVoiceID: String) {
@@ -48,23 +53,25 @@ public final class ElevenLabsSynthesizer: NSObject, Synthesizer, @unchecked Send
     let id = voiceID
     let seq = nextSequence
     nextSequence += 1
+    let gen = generation
     lock.unlock()
     log.debug("requesting TTS seq=\(seq, privacy: .public) (\(text.count, privacy: .public) chars)")
     Task { [client] in
       do {
         let data = try await client.synthesize(text: text, voiceID: id)
         log.debug("TTS arrived seq=\(seq, privacy: .public) (\(data.count, privacy: .public) bytes)")
-        await MainActor.run { self.deliver(seq: seq, data: data) }
+        await MainActor.run { self.deliver(gen: gen, seq: seq, data: data) }
       } catch {
         log.error("TTS seq=\(seq, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
         // Mark this slot as a no-op so subsequent ones still flush.
-        await MainActor.run { self.skip(seq: seq) }
+        await MainActor.run { self.skip(gen: gen, seq: seq) }
       }
     }
   }
 
   public func stop() {
     lock.lock()
+    generation += 1
     audioQueue.removeAll()
     pendingAudio.removeAll()
     // Reset sequence numbers so the next response cycle starts at 0.
@@ -78,8 +85,9 @@ public final class ElevenLabsSynthesizer: NSObject, Synthesizer, @unchecked Send
   // MARK: - Reorder buffer
 
   @MainActor
-  private func deliver(seq: Int, data: Data) {
+  private func deliver(gen: Int, seq: Int, data: Data) {
     lock.lock()
+    guard gen == generation else { lock.unlock(); return }  // stale cycle
     pendingAudio[seq] = data
     // Drain any contiguous prefix into the playback queue.
     while let ready = pendingAudio.removeValue(forKey: nextToEnqueue) {
@@ -92,8 +100,9 @@ public final class ElevenLabsSynthesizer: NSObject, Synthesizer, @unchecked Send
   }
 
   @MainActor
-  private func skip(seq: Int) {
+  private func skip(gen: Int, seq: Int) {
     lock.lock()
+    guard gen == generation else { lock.unlock(); return }  // stale cycle
     pendingAudio[seq] = Data()  // empty marker
     while let ready = pendingAudio.removeValue(forKey: nextToEnqueue) {
       if !ready.isEmpty { audioQueue.append(ready) }
