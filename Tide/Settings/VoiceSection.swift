@@ -12,16 +12,6 @@ struct VoiceSection: View {
   @State private var showRecognizerKeyMissingHint = false
   @State private var showLocalModelMissingHint = false
 
-  /// Mirror of `settings.speechRecognizer` as a typed enum. SwiftUI tracks
-  /// this `@State` directly, so the radio group re-renders the moment the
-  /// user taps a different option — whereas `settings.speechRecognizer` is
-  /// a computed property over UserDefaults, which the `@Observable` macro
-  /// can't track (it only generates observation tracking for stored
-  /// properties). Without this mirror, only the initial value (.hybrid by
-  /// default) ever appeared selected even after the user clicked Apple
-  /// or ElevenLabs — UserDefaults was updated, but the picker didn't know.
-  @State private var recognizerChoice: SpeechRecognizerChoice = .default
-
   private var appleVoices: [AVSpeechSynthesisVoice] {
     AVSpeechSynthesisVoice.speechVoices()
       .filter { $0.language.hasPrefix("de") || $0.language.hasPrefix("en") }
@@ -29,19 +19,14 @@ struct VoiceSection: View {
   }
 
   var body: some View {
+    @Bindable var settings = settings
     Form {
       Section {
-        Toggle("Antworten vorlesen", isOn: Binding(
-          get: { settings.voiceEnabled },
-          set: { settings.voiceEnabled = $0 }
-        ))
+        Toggle("Antworten vorlesen", isOn: $settings.voiceEnabled)
       } header: { Text("Text-to-Speech") }
 
       Section {
-        Picker("TTS-Provider:", selection: Binding(
-          get: { settings.ttsProvider },
-          set: { settings.ttsProvider = $0 }
-        )) {
+        Picker("TTS-Provider:", selection: $settings.ttsProvider) {
           Text("Apple (System)").tag("apple")
           Text("ElevenLabs (Cloud)").tag("elevenLabs")
         }
@@ -55,10 +40,7 @@ struct VoiceSection: View {
 
       if settings.ttsProvider == "apple" {
         Section {
-          Picker("Stimme:", selection: Binding(
-            get: { settings.voiceIdentifier },
-            set: { settings.voiceIdentifier = $0 }
-          )) {
+          Picker("Stimme:", selection: $settings.voiceIdentifier) {
             ForEach(appleVoices, id: \.identifier) { voice in
               Text("\(voice.name) (\(voice.language))").tag(voice.identifier)
             }
@@ -91,10 +73,7 @@ struct VoiceSection: View {
 
         if !elevenLabsVoices.isEmpty {
           Section {
-            Picker("Stimme:", selection: Binding(
-              get: { settings.elevenLabsVoiceID },
-              set: { settings.elevenLabsVoiceID = $0 }
-            )) {
+            Picker("Stimme:", selection: $settings.elevenLabsVoiceID) {
               ForEach(elevenLabsVoices) { voice in
                 Text("\(voice.name)\(voice.category.map { " (\($0))" } ?? "")")
                   .tag(voice.voice_id)
@@ -106,34 +85,34 @@ struct VoiceSection: View {
       }
 
       Section {
-        // Picker drives `recognizerChoice` (local @State). We bridge to
-        // `settings.speechRecognizer` (UserDefaults string) via onChange.
-        // See the property comment above for why the indirection is
-        // needed.
-        Picker("Recognizer:", selection: $recognizerChoice) {
+        // The picker reads/writes `settings.speechRecognizer` through an
+        // enum adapter whose `set` folds in the snap-back validation: a
+        // choice that needs an ElevenLabs key or a missing local model
+        // reverts to `.apple` and surfaces the matching hint.
+        Picker("Recognizer:", selection: Binding(
+          get: { SpeechRecognizerChoice(rawValue: settings.speechRecognizer) ?? .default },
+          set: { newChoice in
+            if newChoice.requiresElevenLabsKey, elevenLabsKey.isEmpty {
+              settings.speechRecognizer = SpeechRecognizerChoice.apple.rawValue
+              showRecognizerKeyMissingHint = true
+              showLocalModelMissingHint = false
+            } else if newChoice.requiresLocalModel,
+                      !WhisperModelStore().isInstalled(settings.localModelName) {
+              settings.speechRecognizer = SpeechRecognizerChoice.apple.rawValue
+              showLocalModelMissingHint = true
+              showRecognizerKeyMissingHint = false
+            } else {
+              settings.speechRecognizer = newChoice.rawValue
+              showRecognizerKeyMissingHint = false
+              showLocalModelMissingHint = false
+            }
+          }
+        )) {
           ForEach(SpeechRecognizerChoice.allCases, id: \.self) { choice in
             Text(choice.displayName).tag(choice)
           }
         }
         .pickerStyle(.radioGroup)
-        .onChange(of: recognizerChoice) { _, newChoice in
-          if newChoice.requiresElevenLabsKey, elevenLabsKey.isEmpty {
-            recognizerChoice = .apple
-            settings.speechRecognizer = SpeechRecognizerChoice.apple.rawValue
-            showRecognizerKeyMissingHint = true
-            showLocalModelMissingHint = false
-          } else if newChoice.requiresLocalModel,
-                    !WhisperModelStore().isInstalled(settings.localModelName) {
-            recognizerChoice = .apple
-            settings.speechRecognizer = SpeechRecognizerChoice.apple.rawValue
-            showLocalModelMissingHint = true
-            showRecognizerKeyMissingHint = false
-          } else {
-            settings.speechRecognizer = newChoice.rawValue
-            showRecognizerKeyMissingHint = false
-            showLocalModelMissingHint = false
-          }
-        }
 
         if showRecognizerKeyMissingHint {
           Text("ElevenLabs API-Key fehlt — siehe ElevenLabs-Provider oben, "
@@ -156,10 +135,7 @@ struct VoiceSection: View {
       } header: { Text("Spracherkennung") }
 
       Section {
-        Toggle("Nach Push-to-Talk automatisch senden", isOn: Binding(
-          get: { settings.autoSendAfterPushToTalk },
-          set: { settings.autoSendAfterPushToTalk = $0 }
-        ))
+        Toggle("Nach Push-to-Talk automatisch senden", isOn: $settings.autoSendAfterPushToTalk)
         Text("Wenn aus: Der transkribierte Text landet im Eingabefeld — "
           + "du kannst ihn editieren und manuell mit Return senden. "
           + "Reiner Diktiermodus.")
@@ -168,10 +144,7 @@ struct VoiceSection: View {
       } header: { Text("Push-to-Talk-Verhalten") }
 
       Section {
-        Toggle("Selektion standardmäßig ersetzen", isOn: Binding(
-          get: { settings.replaceSelectionByDefault },
-          set: { settings.replaceSelectionByDefault = $0 }
-        ))
+        Toggle("Selektion standardmäßig ersetzen", isOn: $settings.replaceSelectionByDefault)
         Text("Wenn aktiv, ersetzt Tide den markierten Text automatisch nach dem Senden.")
           .font(.caption)
           .foregroundStyle(.secondary)
@@ -179,9 +152,6 @@ struct VoiceSection: View {
     }
     .formStyle(.grouped)
     .task {
-      // Seed the local picker-state from the persisted settings string.
-      recognizerChoice = SpeechRecognizerChoice(rawValue: settings.speechRecognizer)
-        ?? .default
       if settings.ttsProvider == "elevenLabs", !elevenLabsKey.isEmpty {
         fetchVoices()
       }
