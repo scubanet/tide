@@ -17,6 +17,9 @@ public enum ClipboardPaste {
     let oldContents = pasteboard.string(forType: .string)
     pasteboard.clearContents()
     pasteboard.setString(text, forType: .string)
+    // Remember the change count of OUR write so the delayed restore can
+    // tell whether the user copied something new in the meantime.
+    let injectedChangeCount = pasteboard.changeCount
 
     let ok = await postCommandV()
     log.debug("ClipboardPaste ⌘V posted=\(ok, privacy: .public) (\(text.count, privacy: .public) chars)")
@@ -31,6 +34,10 @@ public enum ClipboardPaste {
     // comfortably past their read window.
     Task { @MainActor in
       try? await Task.sleep(nanoseconds: 800_000_000)
+      // Only restore if the pasteboard still holds Tide's injected text.
+      // If the user copied something new during the window, leave their
+      // fresh clipboard alone instead of clobbering it with stale data.
+      guard pasteboard.changeCount == injectedChangeCount else { return }
       pasteboard.clearContents()
       if let old = oldContents { pasteboard.setString(old, forType: .string) }
     }

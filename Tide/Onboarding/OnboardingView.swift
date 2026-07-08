@@ -5,6 +5,7 @@ import Core
 /// final "Fertig" button (and is wired by MenubarController to close the
 /// hosting window).
 struct OnboardingView: View {
+  let settings: AppSettings
   let onClose: () -> Void
 
   @State private var step: OnboardingStep = .welcome
@@ -45,7 +46,7 @@ struct OnboardingView: View {
     case .apiKey:      ApiKeyStep(hasKey: $hasKey)
     case .permissions: PermissionsStep()
     case .hotkey:      HotkeyStep()
-    case .voice:       VoiceStep()
+    case .voice:       VoiceStep(settings: settings)
     case .done:        DoneStep()
     }
   }

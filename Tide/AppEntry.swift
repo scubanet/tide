@@ -4,6 +4,7 @@ import Core
 import Hotkeys
 import KeyboardShortcuts
 import LLM
+import Sparkle
 import TideSpeech
 
 @main
@@ -20,6 +21,11 @@ final class TideAppDelegate: NSObject, NSApplicationDelegate {
   @MainActor private var conversationStore: ConversationStore?
   @MainActor private var pushToTalk: PushToTalkHandler?
   @MainActor private var dictationCoordinator: DictationCoordinator?
+  /// Sparkle auto-updater. `startingUpdater: true` schedules background
+  /// update checks against the appcast in Info.plist (SUFeedURL); the
+  /// panel's "Nach Updates suchen…" button triggers a manual check.
+  /// Held for the app's lifetime so scheduled checks keep running.
+  @MainActor private var updaterController: SPUStandardUpdaterController?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     // Skip single-instance enforcement under XCTest: the test host is the
@@ -50,6 +56,13 @@ final class TideAppDelegate: NSObject, NSApplicationDelegate {
         let store = try ConversationStore()
         self.conversationStore = store
 
+        // If the on-disk store couldn't be opened (schema mismatch after an
+        // update), ConversationStore archived it and started fresh — tell the
+        // user where their old history went instead of losing it silently.
+        if !isRunningTests, let backup = store.archivedBackupURL {
+          Self.showStoreArchivedAlert(backupURL: backup)
+        }
+
         // Build settings + LLM provider once and share them across all
         // collaborators that need them. Welle 4 adds the dictation
         // coordinator, which needs the same configuration the
@@ -76,10 +89,23 @@ final class TideAppDelegate: NSObject, NSApplicationDelegate {
         let apiKey = KeychainHelper.get(key: "anthropic.api_key") ?? ""
         let provider = AnthropicProvider(apiKey: apiKey)
 
+        // Sparkle: create the updater (skipped under tests — it would reach
+        // out to the network appcast). Held on the delegate for its lifetime.
+        if !isRunningTests {
+          self.updaterController = SPUStandardUpdaterController(
+            startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil
+          )
+          // MetricKit crash/hang diagnostics → OSLog.
+          MetricKitLogger.shared.start()
+        }
+
         let controller = MenubarController(
           conversationStore: store,
           settings: settings,
-          provider: provider
+          provider: provider,
+          onCheckForUpdates: { [weak self] in
+            self?.updaterController?.checkForUpdates(nil)
+          }
         )
         self.menubarController = controller
 
@@ -169,5 +195,17 @@ final class TideAppDelegate: NSObject, NSApplicationDelegate {
         NSLog("Tide: failed to init store: \(error)")
       }
     }
+  }
+
+  @MainActor
+  private static func showStoreArchivedAlert(backupURL: URL) {
+    let alert = NSAlert()
+    alert.messageText = "Verlauf wurde archiviert"
+    alert.informativeText = "Deine bisherige Konversations-Datenbank ließ sich "
+      + "nach dem Update nicht öffnen und wurde gesichert nach:\n\n\(backupURL.path)\n\n"
+      + "Tide startet mit leerem Verlauf."
+    alert.alertStyle = .warning
+    alert.addButton(withTitle: "OK")
+    alert.runModal()
   }
 }

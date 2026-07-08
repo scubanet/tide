@@ -4,7 +4,7 @@ Native macOS Menubar-KI-Assistent. Push-to-Talk an Claude mit Text-Selektions-Ko
 
 ## Was Tide kann
 
-- **Push-to-Talk via globalen Hotkey** — beliebige Taste festhalten (default `fn`), reden, loslassen sendet
+- **Push-to-Talk via globalen Hotkey** — Taste festhalten (default `⌥Return` / rechte Option + Return, in Settings frei belegbar), reden, loslassen sendet
 - **Live-Streaming-Antworten** von Claude (Anthropic API, SSE-Streaming)
 - **Streaming-TTS** via `AVSpeechSynthesizer` oder **ElevenLabs** (umschaltbar in Settings)
 - **Spracherkennung umschaltbar**: Apple (on-device), ElevenLabs Scribe, Hybrid (Apple live + ElevenLabs final), Lokal (WhisperKit) und Hybrid-Lokal (Apple live + WhisperKit final)
@@ -19,7 +19,7 @@ Native macOS Menubar-KI-Assistent. Push-to-Talk an Claude mit Text-Selektions-Ko
 
 ## Status
 
-**v0.1.0 — pre-release.** Tide wird vom Autor täglich genutzt. Keine signierten DMG-Releases. Wer ihn auf seinem Mac bauen will: siehe Quick-Start unten.
+**v0.3.0 — pre-release.** Tide wird vom Autor täglich genutzt. Signierte + notarisierte DMG-Releases mit Sparkle-Auto-Update sind eingerichtet (`scripts/release.sh`, GitHub-Actions); der Auto-Updater ist in-App verdrahtet („Nach Updates suchen…" im Panel). Wer selbst bauen will: siehe Quick-Start unten.
 
 ## Quick-Start (Eigenbau)
 
@@ -64,9 +64,9 @@ Siehe [CHANGELOG.md](CHANGELOG.md) für Versions-History. Nächste Wellen:
 | 5 | Lokale Transkription (WhisperKit) + Hybrid-Lokal | ✅ |
 | 6 | Diktat-Transform-Modi (Calmer/Emoji/Bullets/Professional) | ✅ |
 | 7 | Settings-Sidebar | ✅ |
-| 8 | Distribution (DMG, Notarization, GitHub-Releases via Sparkle) | 🔜 |
+| 8 | Distribution (DMG, Notarization, GitHub-Releases via Sparkle) | ✅ |
 | 9 | Onboarding-Wizard (First-Run-Setup) | ✅ |
-| 10 | Crash-Reporting | 🔜 |
+| 10 | Crash-Reporting (MetricKit → OSLog; volles Backend offen) | 🚧 |
 
 ## Anforderungen
 
@@ -77,7 +77,9 @@ Siehe [CHANGELOG.md](CHANGELOG.md) für Versions-History. Nächste Wellen:
 
 ## Lizenz
 
-Kein Public-Release-Lizenz-Statement bisher — Repo ist privat.
+Proprietär — All Rights Reserved (siehe [`LICENSE`](LICENSE)). Selbst-Bauen
+zur persönlichen Evaluation ist erlaubt. Platzhalter: bei einem echten
+Open-Source-Release durch MIT/Apache-2.0/GPL ersetzen.
 
 ---
 

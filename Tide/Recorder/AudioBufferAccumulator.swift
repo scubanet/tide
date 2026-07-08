@@ -24,12 +24,38 @@ public final class AudioBufferAccumulator: @unchecked Sendable {
     inputFormat = nil
   }
 
-  /// Append a single tap-buffer.
+  /// Append a single tap-buffer. The buffer is deep-copied first: an
+  /// `AVAudioNodeTapBlock` buffer is only guaranteed valid for the duration
+  /// of the block, but `exportWAV()` reads the samples later on another
+  /// thread — so we must own memory whose lifetime we control.
   public func append(_ buffer: AVAudioPCMBuffer) {
+    guard let copy = Self.copy(buffer) else { return }
     lock.lock()
     defer { lock.unlock() }
-    if inputFormat == nil { inputFormat = buffer.format }
-    chunks.append(buffer)
+    if inputFormat == nil { inputFormat = copy.format }
+    chunks.append(copy)
+  }
+
+  /// Deep-copy a PCM buffer's sample data into a freshly-allocated buffer.
+  private static func copy(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+    guard let out = AVAudioPCMBuffer(
+      pcmFormat: buffer.format, frameCapacity: buffer.frameLength
+    ) else { return nil }
+    out.frameLength = buffer.frameLength
+    let channels = Int(buffer.format.channelCount)
+    let frames = Int(buffer.frameLength)
+    if let src = buffer.floatChannelData, let dst = out.floatChannelData {
+      for ch in 0..<channels {
+        memcpy(dst[ch], src[ch], frames * MemoryLayout<Float>.size)
+      }
+    } else if let src = buffer.int16ChannelData, let dst = out.int16ChannelData {
+      for ch in 0..<channels {
+        memcpy(dst[ch], src[ch], frames * MemoryLayout<Int16>.size)
+      }
+    } else {
+      return nil
+    }
+    return out
   }
 
   /// Total frame count across all buffered chunks.

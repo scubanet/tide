@@ -80,15 +80,24 @@ public final class AppleSpeechRecognizer: SpeechRecognizer, @unchecked Sendable 
 
     // Reset state and install a fresh partial stream under the lock, so a
     // reused recognizer (second start/stop cycle) yields into a live stream.
-    lock.withLock {
-      // Finish any stream left over from a prior cycle never stopped.
+    // Capture any request/task from a prior start() that never had a
+    // matching stop() so we can tear them down below — otherwise the old
+    // SFSpeechRecognitionTask keeps running and its late callback would
+    // clobber the new session's lastFinalTranscript.
+    let (staleRequest, staleTask): (SFSpeechAudioBufferRecognitionRequest?, SFSpeechRecognitionTask?) = lock.withLock {
       partialContinuation?.finish()
+      let previousRequest = self.request
+      let previousTask = self.task
       let (stream, continuation) = AsyncStream<String>.makeStream()
       _stream = stream
       partialContinuation = continuation
       self.request = req
+      self.task = nil
       self.lastFinalTranscript = ""
+      return (previousRequest, previousTask)
     }
+    staleRequest?.endAudio()
+    staleTask?.cancel()
 
     log.debug("creating recognitionTask")
     let createdTask = recognizer.recognitionTask(with: req) { [weak self] result, error in

@@ -9,6 +9,18 @@
 
 ---
 
+> **⚠️ Historisches Dokument (Pre-Implementation-Spec).** Dies ist der
+> ursprüngliche Entwurf vom 22.05.2026. Die Implementierung ist seitdem
+> abgewichen: einige hier genannte Typen (`HotkeyController`, `InputBar`,
+> `BubbleActionsRow`, `AppContainer`) existieren so nicht; das Speech-Package
+> umfasst zusätzlich ElevenLabs + WhisperKit + Hybrid-Router; das
+> Settings-Fenster hat 8 Sektionen (gruppierte Sidebar) statt 5; `Message`
+> speichert Selection-Kontext als `selectionContextJSON` statt typisiert.
+> Für die aktuelle Architektur ist der Code die Referenz — dieses Dokument
+> beschreibt Intent und Design-Entscheidungen, nicht den Ist-Zustand.
+
+---
+
 ## Was wir bauen
 
 Eine native macOS-Menubar-App, inspiriert vom Konzept der Windows-App „2Key" (Sebastian Claes, YouTube-Video „Claude Code hat meinen Computer zur Super-KI gemacht"). Bewusster **Konzept-Klon**, kein Source-Port — die Original-UI war im Video nicht ausreichend detailliert sichtbar, und der Quellcode liegt nicht vor. Die finale App fühlt sich daher nicht 1:1 wie 2Key an, sondern nach Mac.

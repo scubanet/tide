@@ -6,6 +6,9 @@ import Core
 /// once the pane count passed what fit at 520 pt wide. The sidebar scales to
 /// any number of panes; sections come from `SettingsTab.groups`.
 struct SettingsWindow: View {
+  /// The one shared settings instance (from the app delegate). Passed to the
+  /// panes that edit settings so their writes reach the running app live.
+  let settings: AppSettings
   @State private var selection: SettingsTab = .api
 
   var body: some View {
@@ -34,12 +37,12 @@ struct SettingsWindow: View {
   private func detail(for tab: SettingsTab) -> some View {
     switch tab {
     case .api:        ApiKeySection()
-    case .model:      ModelSection()
-    case .voice:      VoiceSection()
-    case .vocabulary: VocabularySection()
-    case .local:      LocalModelSection()
+    case .model:      ModelSection(settings: settings)
+    case .voice:      VoiceSection(settings: settings)
+    case .vocabulary: VocabularySection(settings: settings)
+    case .local:      LocalModelSection(settings: settings)
     case .hotkey:     HotkeySection()
-    case .dictation:  DictationSection()
+    case .dictation:  DictationSection(settings: settings)
     case .actions:    QuickActionsEditor()
     }
   }

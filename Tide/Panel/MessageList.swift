@@ -7,6 +7,28 @@ struct MessageList: View {
   let messages: [Message]
 
   var body: some View {
+    if messages.isEmpty {
+      emptyState
+    } else {
+      messageScroll
+    }
+  }
+
+  private var emptyState: some View {
+    VStack(spacing: 8) {
+      Image(systemName: "waveform.circle")
+        .font(.system(size: 34))
+        .foregroundStyle(.tertiary)
+      Text("Halte deinen Push-to-Talk-Hotkey und sprich —\noder tippe unten eine Frage.")
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .multilineTextAlignment(.center)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .padding(24)
+  }
+
+  private var messageScroll: some View {
     ScrollViewReader { proxy in
       ScrollView {
         LazyVStack(spacing: 8) {

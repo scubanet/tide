@@ -22,8 +22,6 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSUIElement</key>
 	<true/>
-	<key>NSAppleEventsUsageDescription</key>
-	<string>Tide nutzt Apple Events um mit anderen Apps zu kommunizieren (z.B. für die Text-Ersetzung).</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Tide nutzt das Mikrofon für Push-to-Talk-Eingaben an Claude.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

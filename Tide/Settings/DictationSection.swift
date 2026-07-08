@@ -9,7 +9,7 @@ import Core
 /// editor shows; writing saves to that mode's `AppSettings` key.
 /// `raw` has no prompt and is excluded from the picker.
 struct DictationSection: View {
-  @State private var settings = AppSettings()
+  let settings: AppSettings
   @State private var selectedMode: PromptMode = .polished
 
   /// The prompt-bearing modes (everything except raw).

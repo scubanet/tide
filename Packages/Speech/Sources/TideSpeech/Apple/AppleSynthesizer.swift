@@ -18,7 +18,11 @@ public final class AppleSynthesizer: NSObject, Synthesizer, @unchecked Sendable 
     super.init()
   }
 
-  public var isSpeaking: Bool { synth.isSpeaking }
+  // The lock guards `voiceIdentifier` AND every touch of `synth`
+  // (speak/stop/isSpeaking) — AVSpeechSynthesizer is not documented as
+  // thread-safe, and `@unchecked Sendable` promises callers full
+  // thread-safety, so the lock has to cover all of it, not just the voice.
+  public var isSpeaking: Bool { lock.withLock { synth.isSpeaking } }
 
   public func setVoice(identifier: String) {
     lock.lock()
@@ -30,8 +34,8 @@ public final class AppleSynthesizer: NSObject, Synthesizer, @unchecked Sendable 
   public func speak(_ text: String) {
     guard !text.isEmpty else { return }
     lock.lock()
+    defer { lock.unlock() }
     let id = voiceIdentifier
-    lock.unlock()
 
     let utterance = AVSpeechUtterance(string: text)
     utterance.voice = AVSpeechSynthesisVoice(identifier: id)
@@ -42,6 +46,8 @@ public final class AppleSynthesizer: NSObject, Synthesizer, @unchecked Sendable 
   }
 
   public func stop() {
+    lock.lock()
+    defer { lock.unlock() }
     log.debug("stop")
     synth.stopSpeaking(at: .immediate)
   }

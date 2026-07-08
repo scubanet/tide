@@ -5,7 +5,7 @@ import TideSpeech
 /// Settings tab for the local WhisperKit models: pick a model, download it
 /// (with progress), see install state. Fully offline & free after download.
 struct LocalModelSection: View {
-  @State private var settings = AppSettings()
+  let settings: AppSettings
   @State private var store = WhisperModelStore()
   @State private var catalog: [WhisperModelInfo] = []
   @State private var downloading = false

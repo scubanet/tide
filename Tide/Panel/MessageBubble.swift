@@ -12,7 +12,7 @@ struct MessageBubble: View {
     HStack(alignment: .top) {
       if message.role == .user { Spacer(minLength: 40) }
       VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
-        Text(message.content.isEmpty ? "…" : message.content)
+        Text(rendered)
           .padding(.horizontal, 11)
           .padding(.vertical, 8)
           .background(
@@ -22,20 +22,55 @@ struct MessageBubble: View {
           )
           .clipShape(.rect(cornerRadius: 10))
           .textSelection(.enabled)
-        if message.role == .assistant, hasSelectionContext, let onReplace {
-          Button {
-            onReplace(message.content)
-          } label: {
-            Label("Ersetzen", systemImage: "arrow.uturn.forward.square")
-              .font(.system(size: 11))
+        if message.role == .assistant, !message.content.isEmpty {
+          HStack(spacing: 12) {
+            Button {
+              copyToClipboard(message.content)
+            } label: {
+              Label("Kopieren", systemImage: "doc.on.doc")
+                .font(.system(size: 11))
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("Antwort kopieren")
+            if hasSelectionContext, let onReplace {
+              Button {
+                onReplace(message.content)
+              } label: {
+                Label("Ersetzen", systemImage: "arrow.uturn.forward.square")
+                  .font(.system(size: 11))
+              }
+              .buttonStyle(.borderless)
+              .foregroundStyle(.secondary)
+              .accessibilityLabel("Selektion ersetzen")
+            }
           }
-          .buttonStyle(.borderless)
-          .foregroundStyle(.secondary)
         }
       }
       if message.role == .assistant { Spacer(minLength: 40) }
     }
     .padding(.horizontal, 12)
+  }
+
+  /// Assistant/​user text rendered as Markdown. Claude replies in Markdown,
+  /// so bold/italic/inline-code/links render instead of showing raw `**`.
+  /// `.inlineOnlyPreservingWhitespace` keeps line breaks (chat, not a doc)
+  /// and tolerates the half-formed Markdown seen mid-stream; on any parse
+  /// failure we fall back to the raw string.
+  private var rendered: AttributedString {
+    if message.content.isEmpty { return AttributedString("…") }
+    if let attributed = try? AttributedString(
+      markdown: message.content,
+      options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+    ) {
+      return attributed
+    }
+    return AttributedString(message.content)
+  }
+
+  private func copyToClipboard(_ text: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(text, forType: .string)
   }
 
   /// True when the preceding user message in this conversation carries a

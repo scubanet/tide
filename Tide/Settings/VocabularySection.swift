@@ -9,7 +9,7 @@ import Core
 /// correctly. The list is read and written directly on
 /// `AppSettings.customVocabulary`, which `@Observable` now tracks.
 struct VocabularySection: View {
-  @State private var settings = AppSettings()
+  let settings: AppSettings
   @State private var newTerm: String = ""
 
   /// Above this count we surface a soft warning — Apple recommends fewer

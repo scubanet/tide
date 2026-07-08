@@ -13,6 +13,14 @@ git push origin v0.2.1
 
 Everything below is the one-time setup needed before that works.
 
+> **⚠️ Appcast-URL-Invariante.** `SUFeedURL` points at
+> `releases/latest/download/appcast.xml`, and GitHub's `latest` only
+> resolves to **non-prerelease** releases. If any release is ever marked
+> "prerelease", every installed client silently stops seeing updates until
+> a newer stable release ships. Keep releases non-prerelease, or move the
+> appcast to a stable URL (e.g. a `gh-pages` branch) that doesn't depend on
+> `latest`.
+
 ---
 
 ## 1. Local prerequisites

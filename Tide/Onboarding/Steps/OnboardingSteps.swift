@@ -117,7 +117,7 @@ struct HotkeyStep: View {
 // MARK: Voice / Recognizer
 
 struct VoiceStep: View {
-  @State private var settings = AppSettings()
+  let settings: AppSettings
 
   var body: some View {
     @Bindable var settings = settings

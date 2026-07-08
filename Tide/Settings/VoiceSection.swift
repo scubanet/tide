@@ -4,7 +4,7 @@ import Core
 import TideSpeech
 
 struct VoiceSection: View {
-  @State private var settings = AppSettings()
+  let settings: AppSettings
   @State private var elevenLabsKey: String = KeychainHelper.get(key: "elevenlabs.api_key") ?? ""
   @State private var elevenLabsVoices: [ElevenLabsClient.Voice] = []
   @State private var fetchingVoices = false

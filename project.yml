@@ -40,6 +40,7 @@ targets:
       - path: Tide
     resources:
       - path: Tide/Assets.xcassets
+      - path: Tide/PrivacyInfo.xcprivacy
     dependencies:
       - package: Core
       - package: LLM
@@ -57,13 +58,19 @@ targets:
         LSUIElement: true
         NSMicrophoneUsageDescription: "Tide nutzt das Mikrofon für Push-to-Talk-Eingaben an Claude."
         NSSpeechRecognitionUsageDescription: "Tide transkribiert deine Sprach-Eingaben."
-        NSAppleEventsUsageDescription: "Tide nutzt Apple Events um mit anderen Apps zu kommunizieren (z.B. für die Text-Ersetzung)."
         SUFeedURL: "https://github.com/scubanet/tide/releases/latest/download/appcast.xml"
         SUPublicEDKey: "cdoDIHiWb5SuO+1SwHI4MmNI5tN8dDdqTqpmfBPO3BA="
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: swiss.weckherlin.tide
         CODE_SIGN_ENTITLEMENTS: Tide/Tide.entitlements
+      configs:
+        # Hardened Runtime + secure timestamp are required for Apple
+        # notarization. Set here (not just in release.sh) so any Xcode-UI
+        # Archive also produces a notarizable build.
+        Release:
+          ENABLE_HARDENED_RUNTIME: YES
+          OTHER_CODE_SIGN_FLAGS: "--timestamp"
 
   TideTests:
     type: bundle.unit-test

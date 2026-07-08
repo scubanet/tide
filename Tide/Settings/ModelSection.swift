@@ -2,7 +2,7 @@ import SwiftUI
 import Core
 
 struct ModelSection: View {
-  @State private var settings = AppSettings()
+  let settings: AppSettings
 
   private let availableModels = [
     "claude-sonnet-4-6",

@@ -5,11 +5,19 @@ import LLM
 import Selection
 
 @MainActor
-final class MenubarController {
+final class MenubarController: NSObject {
   private let statusItem: NSStatusItem
   private let panel: PanelWindow
   private let conversationStore: ConversationStore
+  /// The one shared settings instance, threaded into the Settings window and
+  /// onboarding wizard so their edits reach the running chat/dictation flows
+  /// live (the sections used to each `new` their own instance, which — after
+  /// AppSettings became stored-property @Observable — only synced on restart).
+  private let settings: AppSettings
   let chatViewModel: ChatViewModel
+  /// Invoked by the panel's "Nach Updates suchen…" button. Wired by the app
+  /// delegate to the Sparkle updater.
+  private let onCheckForUpdates: () -> Void
   private var settingsWindow: NSWindow?
   private var onboardingWindow: NSWindow?
   /// Token for the `.tideOpenOnboarding` observer, removed in `deinit` so a
@@ -34,9 +42,12 @@ final class MenubarController {
   init(
     conversationStore: ConversationStore,
     settings: AppSettings,
-    provider: any LLMProvider
+    provider: any LLMProvider,
+    onCheckForUpdates: @escaping () -> Void = {}
   ) {
     self.conversationStore = conversationStore
+    self.settings = settings
+    self.onCheckForUpdates = onCheckForUpdates
     self.chatViewModel = ChatViewModel(
       conversationStore: conversationStore,
       provider: provider,
@@ -44,6 +55,7 @@ final class MenubarController {
     )
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     panel = PanelWindow()
+    super.init()
     if let button = statusItem.button {
       // Use the app's own bundled icon in the menubar instead of an
       // SF Symbol. `applicationIconImage` is the AppIcon asset Xcode
@@ -79,7 +91,8 @@ final class MenubarController {
     let view = PanelView(
       conversationStore: conversationStore,
       chatViewModel: chatViewModel,
-      onOpenSettings: { [weak self] in self?.openSettings() }
+      onOpenSettings: { [weak self] in self?.openSettings() },
+      onCheckForUpdates: { [weak self] in self?.onCheckForUpdates() }
     )
     panel.contentViewController = NSHostingController(rootView: view)
     onboardingObserver = NotificationCenter.default.addObserver(
@@ -106,9 +119,10 @@ final class MenubarController {
       defer: false
     )
     window.title = "Tide Settings"
-    window.contentViewController = NSHostingController(rootView: SettingsWindow())
+    window.contentViewController = NSHostingController(rootView: SettingsWindow(settings: settings))
     window.center()
     window.isReleasedWhenClosed = false
+    window.delegate = self
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
     settingsWindow = window
@@ -129,9 +143,10 @@ final class MenubarController {
     )
     window.title = "Tide — Einrichtung"
     window.isReleasedWhenClosed = false
-    let view = OnboardingView(onClose: { [weak window] in window?.close() })
+    let view = OnboardingView(settings: settings, onClose: { [weak window] in window?.close() })
     window.contentViewController = NSHostingController(rootView: view)
     window.center()
+    window.delegate = self
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
     onboardingWindow = window
@@ -171,5 +186,17 @@ final class MenubarController {
     let x = buttonFrameOnScreen.midX - panel.frame.width / 2
     let y = buttonFrameOnScreen.minY - panel.frame.height - 4
     panel.setFrameOrigin(NSPoint(x: x, y: y))
+  }
+}
+
+extension MenubarController: NSWindowDelegate {
+  /// Drop our strong reference when the settings/onboarding window closes,
+  /// so the next open rebuilds fresh SwiftUI state. Without this the
+  /// onboarding wizard reopened frozen on its last step with a stale
+  /// key-check instead of restarting at Welcome.
+  func windowWillClose(_ notification: Notification) {
+    guard let closing = notification.object as? NSWindow else { return }
+    if closing === onboardingWindow { onboardingWindow = nil }
+    if closing === settingsWindow { settingsWindow = nil }
   }
 }

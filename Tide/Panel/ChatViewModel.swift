@@ -53,6 +53,45 @@ final class ChatViewModel {
   private let synthesizer: CompositeSynthesizer
   private var pendingForTTS: String = ""
 
+  /// Handle to the in-flight streaming Task so it can be cancelled
+  /// (Stop button / ⌘.). Cancelling it tears down the SSE URLSession
+  /// task via the stream's onTermination — the partial answer stays.
+  private var streamTask: Task<Void, Never>?
+
+  /// Last stream/API error, surfaced as an inline banner in the panel.
+  /// `nil` when there is nothing to show.
+  var lastError: ChatError? = nil
+
+  /// Transient hint after a rejected or failed push-to-talk recording
+  /// (e.g. "Nichts verstanden · nochmal versuchen"). Auto-clears.
+  var sttHint: String? = nil
+  private var sttHintTask: Task<Void, Never>?
+
+  /// User-facing chat error. Decouples the UI banner from `LLMError`
+  /// so the panel can offer the right affordance (retry vs. key-check).
+  enum ChatError: Equatable {
+    case rateLimited
+    case unauthorized
+    case network(String)
+    case server(String)
+
+    var message: String {
+      switch self {
+      case .rateLimited:      "Rate-Limit erreicht — bitte kurz warten."
+      case .unauthorized:     "API-Key ungültig oder abgelaufen."
+      case .network:          "Verbindung weg."
+      case .server(let m):    m.isEmpty ? "Server-Fehler." : m
+      }
+    }
+
+    /// Whether a "Wiederholen" button makes sense. Auth errors need the
+    /// key fixed first, so they get a "API-Key prüfen" action instead.
+    var isRetryable: Bool {
+      if case .unauthorized = self { return false }
+      return true
+    }
+  }
+
   init(conversationStore: ConversationStore, provider: any LLMProvider, settings: AppSettings) {
     self.conversationStore = conversationStore
     self.provider = provider
@@ -86,12 +125,46 @@ final class ChatViewModel {
     }
   }
 
+  /// Fire-and-forget send that stores the streaming Task so the response
+  /// can be cancelled (Stop button / ⌘.). UI entry point for Return, the
+  /// send button, and push-to-talk auto-send.
+  func beginSend() {
+    streamTask?.cancel()
+    streamTask = Task { [weak self] in await self?.send() }
+  }
+
+  /// Cancel the in-flight response and any queued TTS. The partial answer
+  /// that already streamed stays in the chat.
+  func cancelStreaming() {
+    streamTask?.cancel()
+    synthesizer.stop()
+    pendingForTTS = ""
+  }
+
+  /// Re-run the last failed response in place (banner "Wiederholen").
+  func beginRetry() {
+    streamTask?.cancel()
+    streamTask = Task { [weak self] in await self?.retryLast() }
+  }
+
+  func retryLast() async {
+    guard !isStreaming, let error = lastError, error.isRetryable else { return }
+    guard let assistantMsg = messages.last, assistantMsg.role == .assistant,
+          let conv = conversationStore.activeConversation() else { return }
+    lastError = nil
+    isStreaming = true
+    defer { isStreaming = false }
+    await runStream(conv: conv, assistantMsg: assistantMsg)
+  }
+
   func send() async {
     let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
     // Allow send when there's text OR a pending selection (the user just
     // wants Tide to act on the selection without typing anything).
     guard (!trimmed.isEmpty || pendingSelection != nil), !isStreaming else { return }
     input = ""
+    lastError = nil
+    clearSTTHint()
 
     let conv: Conversation
     if let active = conversationStore.activeConversation() {
@@ -141,74 +214,166 @@ final class ChatViewModel {
     isStreaming = true
     defer { isStreaming = false }
 
-    do {
-      let llmMessages = messages.dropLast().map { msg in
-        LLMMessage(
-          role: msg.role == .user ? .user : .assistant,
-          content: msg.content
-        )
-      }
-      let stream = provider.streamChat(
-        messages: Array(llmMessages),
-        tools: [],
-        model: settings.selectedModel,
-        systemPrompt: effectiveSystemPrompt()
-      )
-      for try await chunk in stream {
-        if case let .text(t) = chunk {
-          assistantMsg.content += t
-          // Force SwiftUI re-render by re-emitting the array
-          messages = messages.map { $0 }
-          if settings.voiceEnabled {
-            pendingForTTS += t
-            while let range = pendingForTTS.range(
-              of: #"[\.!\?][\s\n]"#, options: .regularExpression
-            ) {
-              let sentence = String(pendingForTTS[..<range.upperBound])
-              // Pick up the latest user-chosen provider + voice each sentence.
-              let prov: CompositeSynthesizer.Provider =
-                (settings.ttsProvider == "elevenLabs") ? .elevenLabs : .apple
-              synthesizer.setProvider(prov)
-              let voiceID = (prov == .elevenLabs)
-                ? settings.elevenLabsVoiceID
-                : settings.voiceIdentifier
-              synthesizer.setVoice(identifier: voiceID)
-              synthesizer.speak(sentence)
-              pendingForTTS.removeSubrange(..<range.upperBound)
-            }
-          }
-        }
-      }
-      // Flush any leftover partial sentence after the stream ends.
-      if settings.voiceEnabled, !pendingForTTS.isEmpty {
-        let prov: CompositeSynthesizer.Provider =
-          (settings.ttsProvider == "elevenLabs") ? .elevenLabs : .apple
-        synthesizer.setProvider(prov)
-        let voiceID = (prov == .elevenLabs)
-          ? settings.elevenLabsVoiceID
-          : settings.voiceIdentifier
-        synthesizer.setVoice(identifier: voiceID)
-        synthesizer.speak(pendingForTTS)
-      }
-      pendingForTTS = ""
-      do { try conversationStore.append(assistantMsg, to: conv) }
-      catch { Self.log.warning("persist assistant message failed: \(error.localizedDescription, privacy: .public)") }
-    } catch {
-      assistantMsg.content += "\n\n[Fehler: \(error.localizedDescription)]"
-      messages = messages.map { $0 }
-      pendingForTTS = ""
-    }
+    await runStream(conv: conv, assistantMsg: assistantMsg)
+
     // Single-shot: clear the armed action so the next message uses the default.
     selectedActionSlug = nil
   }
 
+  /// Stream the assistant reply into `assistantMsg`. Auto-retries HTTP 429
+  /// with exponential backoff (max 3 attempts, per docs/design.md); other
+  /// failures surface via `lastError`. Cancellation keeps the partial answer.
+  private func runStream(conv: Conversation, assistantMsg: Message) async {
+    let maxAttempts = 3
+    var attempt = 0
+    while true {
+      attempt += 1
+      assistantMsg.content = ""
+      pendingForTTS = ""
+      do {
+        let llmMessages = messages.dropLast().map { msg in
+          LLMMessage(
+            role: msg.role == .user ? .user : .assistant,
+            content: msg.content
+          )
+        }
+        let stream = provider.streamChat(
+          messages: Array(llmMessages),
+          tools: [],
+          model: settings.selectedModel,
+          systemPrompt: effectiveSystemPrompt()
+        )
+        for try await chunk in stream {
+          if case let .text(t) = chunk {
+            assistantMsg.content += t
+            speakIfEnabled(t)
+          }
+        }
+        flushTTS()
+        do { try conversationStore.append(assistantMsg, to: conv) }
+        catch { Self.log.warning("persist assistant message failed: \(error.localizedDescription, privacy: .public)") }
+        lastError = nil
+        return
+      } catch {
+        // Cancellation (Stop button): keep the partial answer, persist, quit.
+        if Task.isCancelled {
+          pendingForTTS = ""
+          try? conversationStore.append(assistantMsg, to: conv)
+          return
+        }
+        // 429 → exponential backoff auto-retry (seeded by retry-after).
+        if let llm = error as? LLMError,
+           case let .rateLimit(retryAfter) = llm, attempt < maxAttempts {
+          let backoff = Double(retryAfter) * pow(2, Double(attempt - 1))
+          try? await Task.sleep(nanoseconds: UInt64(min(backoff, 60) * 1_000_000_000))
+          continue
+        }
+        handleStreamError(error, assistantMsg: assistantMsg, conv: conv)
+        return
+      }
+    }
+  }
+
+  private func handleStreamError(_ error: Error, assistantMsg: Message, conv: Conversation) {
+    pendingForTTS = ""
+    // Persist whatever partial text streamed before the failure.
+    try? conversationStore.append(assistantMsg, to: conv)
+    if let llm = error as? LLMError {
+      switch llm {
+      case .unauthorized:          lastError = .unauthorized
+      case .rateLimit:             lastError = .rateLimited
+      case .network(let m):        lastError = .network(m)
+      case .serverError(_, let m): lastError = .server(m)
+      case .decoding(let m):       lastError = .server(m)
+      }
+    } else {
+      lastError = .network(error.localizedDescription)
+    }
+  }
+
+  private func speakIfEnabled(_ t: String) {
+    guard settings.voiceEnabled else { return }
+    pendingForTTS += t
+    while let range = pendingForTTS.range(
+      of: #"[\.!\?][\s\n]"#, options: .regularExpression
+    ) {
+      let sentence = String(pendingForTTS[..<range.upperBound])
+      speakSentence(sentence)
+      pendingForTTS.removeSubrange(..<range.upperBound)
+    }
+  }
+
+  private func flushTTS() {
+    if settings.voiceEnabled, !pendingForTTS.isEmpty { speakSentence(pendingForTTS) }
+    pendingForTTS = ""
+  }
+
+  private func speakSentence(_ sentence: String) {
+    // Pick up the latest user-chosen provider + voice each sentence.
+    let prov: CompositeSynthesizer.Provider =
+      (settings.ttsProvider == "elevenLabs") ? .elevenLabs : .apple
+    synthesizer.setProvider(prov)
+    let voiceID = (prov == .elevenLabs)
+      ? settings.elevenLabsVoiceID
+      : settings.voiceIdentifier
+    synthesizer.setVoice(identifier: voiceID)
+    synthesizer.speak(sentence)
+  }
+
   func startNew() {
-    synthesizer.stop()
+    cancelStreaming()
     do { _ = try conversationStore.startNew() }
     catch { Self.log.warning("startNew failed: \(error.localizedDescription, privacy: .public)") }
     messages = []
     pendingSelection = nil
     selectedActionSlug = nil
+    lastError = nil
+    clearSTTHint()
+  }
+
+  // MARK: Conversation history
+
+  /// Recent conversations, newest first, for the panel's history menu.
+  func recentConversations(limit: Int = 20) -> [Conversation] {
+    (try? conversationStore.recent(limit: limit)) ?? []
+  }
+
+  /// Switch the panel to an existing conversation. Bumping `updatedAt`
+  /// makes it the active one so subsequent sends append to it.
+  func switchTo(_ conversation: Conversation) {
+    cancelStreaming()
+    conversationStore.touch(conversation)
+    messages = conversation.orderedMessages
+    pendingSelection = nil
+    selectedActionSlug = nil
+    lastError = nil
+    clearSTTHint()
+  }
+
+  /// Delete a conversation. If it was the one on screen, fall back to the
+  /// next active conversation (or an empty panel).
+  func delete(_ conversation: Conversation) {
+    let wasOnScreen = messages.first?.conversation === conversation
+    do { try conversationStore.delete(conversation) }
+    catch { Self.log.warning("delete conversation failed: \(error.localizedDescription, privacy: .public)") }
+    if wasOnScreen {
+      messages = conversationStore.activeConversation()?.orderedMessages ?? []
+    }
+  }
+
+  private func setSTTHint(_ text: String) {
+    sttHint = text
+    sttHintTask?.cancel()
+    sttHintTask = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: 3_000_000_000)
+      guard !Task.isCancelled else { return }
+      self?.sttHint = nil
+    }
+  }
+
+  private func clearSTTHint() {
+    sttHintTask?.cancel()
+    sttHint = nil
   }
 
   /// Stop any in-flight or queued TTS playback. Safe to call when
@@ -225,6 +390,7 @@ final class ChatViewModel {
   func startRecording() async {
     guard !isRecording else { return }
     synthesizer.stop()
+    clearSTTHint()
     // Recognizer is chosen per-session from current settings.
     // We pre-create the AudioBufferAccumulator and hand the *same*
     // instance to both makeRecognizer (so its bufferProvider closure
@@ -268,6 +434,14 @@ final class ChatViewModel {
 
     do {
       try await recorder.start()
+      // A stopRecording() can interleave during the await above (fast
+      // push-to-talk tap) and nil out self.recorder while start() is
+      // suspended. If we've been superseded, tear down this now-orphaned
+      // engine instead of leaving the mic hot. Mirrors DictationCoordinator.
+      guard self.recorder === recorder else {
+        _ = try? await recorder.stop()
+        return
+      }
     } catch {
       isRecording = false
       partialTask?.cancel()
@@ -292,25 +466,28 @@ final class ChatViewModel {
         || TranscriptionQuality.shouldRejectRecording(duration: duration)
         || TranscriptionQuality.isLikelyArtifact(trimmed, recordingDuration: duration)
       if isReject {
-        // Too short / likely a hallucination — silently drop it. No
-        // input, no send, no wasted Claude call. The user just sees the
-        // empty input field (panel context, so no pill hint needed).
+        // Too short / likely a hallucination — drop it (no send, no
+        // wasted Claude call) but tell the user something was heard-and-
+        // rejected, matching the design's STT-failed feedback.
         isRecording = false
+        setSTTHint("Nichts verstanden · nochmal versuchen")
       } else {
         input = trimmed
         isRecording = false
         // Dictation mode: when the user has disabled auto-send the
         // transcription just lands in the input field — they can edit
         // and submit manually. Default (true) preserves the original
-        // push-to-talk-and-send behavior.
+        // push-to-talk-and-send behavior. beginSend() (not await send())
+        // so the resulting stream is cancellable via the Stop button.
         if settings.autoSendAfterPushToTalk {
-          await send()
+          beginSend()
         }
       }
     } catch {
       // Recorder failed — drop the recording-state so the UI can
-      // recover. The user sees an empty TextField, nothing crashes.
+      // recover, and surface a hint instead of a silent empty field.
       isRecording = false
+      setSTTHint("Aufnahme fehlgeschlagen")
     }
     self.recorder = nil
     partialTask?.cancel()

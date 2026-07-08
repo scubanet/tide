@@ -9,8 +9,55 @@ Aktuelle Phase: **pre-release, daily-use by author**, signiertes + notarisiertes
 
 ## [Unreleased]
 
+### Added
+
+- **Auto-Update aktiv** — der Sparkle-Updater wird beim Start instanziiert
+  (`SPUStandardUpdaterController`, geplante Hintergrund-Checks gegen den
+  Appcast) und ist per „Nach Updates suchen…" im Panel manuell auslösbar.
+  Bisher waren nur die Info.plist-Keys gesetzt, ohne Code — Updates wurden
+  ausgeliefert, aber von keinem Client konsumiert.
+- **Fehler-UX im Chat** — API-/Netz-Fehler landen nicht mehr als
+  `[Fehler: …]`-Text in der Bubble, sondern in einem Inline-Banner:
+  429-Rate-Limit macht Auto-Retry mit exponentiellem Backoff (max 3),
+  401 bietet „API-Key prüfen", Netz-/Server-Fehler bieten „Wiederholen"
+  (Teilantwort bleibt erhalten). Verworfene Push-to-Talk-Aufnahmen zeigen
+  „Nichts verstanden" statt stillem Leerfeld.
+- **Markdown-Rendering** — Claude-Antworten werden als Markdown gerendert
+  (fett/kursiv/Code/Links) statt roh mit `**`.
+- **Antwort abbrechen** — der Stop-Button/⌘. bricht jetzt den laufenden
+  Stream ab (nicht nur TTS); während des Streamings ersetzt ein Stop-Button
+  den Senden-Button.
+- **Konversations-Verlauf** — das Panel hat ein Verlaufs-Menü (letzte
+  Konversationen wechseln + löschen); Titel werden aus der ersten Nachricht
+  abgeleitet statt „Neue Konversation".
+- **Empty-State + Copy** — leerer Chat zeigt einen Hinweis; Assistant-Bubbles
+  haben einen Kopieren-Button; Icon-Buttons haben VoiceOver-Labels.
+- **Crash-Diagnostics** — MetricKit-Subscriber loggt Crash-/Hang-Diagnosen
+  nach OSLog (kein Backend, kein Daten-Abfluss).
+- **PrivacyInfo.xcprivacy** — Required-Reason-API-Deklarationen (UserDefaults,
+  File-Timestamp, Disk-Space) fürs App-Target.
+
 ### Fixed
 
+- **Settings-Propagierung repariert** — Settings/Onboarding erzeugten je Section
+  eine eigene `AppSettings()`-Instanz; seit dem Stored-Property-@Observable-Umbau
+  synchronisierten Änderungen (Modell, Stimme, Vokabular, Diktat-Prompts) erst
+  nach Neustart. Jetzt teilen alle Panes die eine gemeinsame Instanz.
+- **Push-to-Talk-Race** — ein schneller PTT-Tap konnte während `recorder.start()`
+  eine laufende AVAudioEngine mit heißem Mikro verwaisen (kein Owner rief je
+  `stop()`). Post-await Identitäts-Check wie im Dictation-Pfad ergänzt.
+- **SwiftData-Migrationsfehler** — ein Schema-Mismatch brach bisher den ganzen
+  Launch ab (tote App ohne Menubar-Icon). Jetzt wird der alte Store datiert
+  archiviert, frisch gestartet und der Backup-Pfad in einem Alert gezeigt.
+- **Onboarding-Reopen** — der Wizard öffnete erneut eingefroren auf dem letzten
+  Schritt; das Fenster wird bei Schließen jetzt freigegeben und startet frisch.
+- **Kleinere Härtungen** — Keychain-Items sind `ThisDeviceOnly` (nicht mehr per
+  Backup migrierbar), der Clipboard-Restore nach Diktat-Paste prüft den
+  `changeCount` (überschreibt keine frisch kopierten Inhalte mehr),
+  `AudioBufferAccumulator` kopiert Tap-Buffer tief, `AppleSynthesizer` sperrt
+  alle Synth-Zugriffe, `AppleSpeechRecognizer.start()` räumt Alt-Tasks ab.
+- **Streaming-Effizienz** — die per-Token Re-Emission des Message-Arrays
+  entfällt; die @Model-Observation von `Message` reicht.
 - **Diktat-Paste zuverlässig** — das synthetische ⌘V wurde gehärtet (Modifier-
   Flag + Inter-Event-Gaps), sodass der Text nicht mehr intermittierend „im
   Nirvana" verschwindet (vor allem im Release-Build). Fehlt das
@@ -172,7 +219,7 @@ SuperWhisper / WisprFlow-Style: Hotkey halten, sprechen, loslassen — der trans
 
 ---
 
-## [Unreleased] — Welle 1 (28.05.2026)
+## [0.1.1] — Welle 1: Polish + README (28.05.2026)
 
 ### Added
 
@@ -286,14 +333,11 @@ standalone Repo (`scubanet/tide`) gemacht wurden.
 
 ---
 
-## Roadmap — kommende Wellen
+## Roadmap
 
-| Welle | Inhalt | Status |
-|---|---|---|
-| 1 | Polish + Verifications + README/CHANGELOG + Icon-Set | ✅ |
-| 2 | ElevenLabs Scribe Hybrid (STT-Genauigkeits-Upgrade, Apple-Live + ElevenLabs-Final) | 🔜 |
-| 3 | Distribution-Pipeline (Sparkle EdDSA-Key, DMG-Build, Code-Signing, Notarization, GitHub-Releases-Workflow) | 🔜 |
-| 4 | UX-Polish (Onboarding-Flow, Crash-Reporting) | 🔜 |
+Die aktuelle Wellen-Roadmap lebt in der [README](README.md#aktuelle-roadmap) —
+diese Tabelle wurde entfernt, um Doppel-Pflege und widersprüchliche
+Wellen-Nummern zu vermeiden.
 
 ### Out-of-Scope der aktuellen Roadmap (eigene spätere Wellen)
 

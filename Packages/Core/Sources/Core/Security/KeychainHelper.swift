@@ -31,6 +31,10 @@ public enum KeychainHelper {
     case errSecItemNotFound:
       var insert = query
       insert[kSecValueData as String] = data
+      // Bind the secret to this device: it stays available after first
+      // unlock (Tide can launch at login) but is excluded from encrypted
+      // backups / Migration Assistant, so keys don't travel to other Macs.
+      insert[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
       let addStatus = SecItemAdd(insert as CFDictionary, nil)
       guard addStatus == errSecSuccess else { throw Error.unhandled(addStatus) }
     default:
