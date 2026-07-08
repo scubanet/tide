@@ -5,8 +5,8 @@ struct ModelSection: View {
   let settings: AppSettings
 
   private let availableModels = [
-    "claude-sonnet-4-6",
-    "claude-opus-4-6",
+    "claude-sonnet-5",
+    "claude-opus-4-8",
     "claude-haiku-4-5-20251001",
   ]
 
@@ -19,7 +19,7 @@ struct ModelSection: View {
             Text(modelLabel(for: model)).tag(model)
           }
         }
-        Text("Sonnet 4.6: schnell, gut. Opus 4.6: stärker, langsamer. Haiku 4.5: günstig, kurz.")
+        Text("Sonnet 5: schnell, gut. Opus 4.8: stärker, langsamer. Haiku 4.5: günstig, kurz.")
           .font(.caption)
           .foregroundStyle(.secondary)
       } header: {
@@ -31,8 +31,8 @@ struct ModelSection: View {
 
   private func modelLabel(for id: String) -> String {
     switch id {
-    case "claude-sonnet-4-6":         "Claude Sonnet 4.6"
-    case "claude-opus-4-6":           "Claude Opus 4.6"
+    case "claude-sonnet-5":           "Claude Sonnet 5"
+    case "claude-opus-4-8":           "Claude Opus 4.8"
     case "claude-haiku-4-5-20251001": "Claude Haiku 4.5"
     default: id
     }

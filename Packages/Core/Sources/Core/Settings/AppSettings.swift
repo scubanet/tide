@@ -5,7 +5,7 @@ import Observation
 /// that are sensitive (API keys) go through `KeychainHelper` instead.
 ///
 /// The defaults chosen here are the "first-run sensible" ones documented
-/// in the design spec: Claude Sonnet 4.6, voice on with German voice,
+/// in the design spec: Claude Sonnet 5, voice on with German voice,
 /// replace-selection off (opt-in, not opt-out).
 @Observable
 @MainActor
@@ -155,7 +155,15 @@ public final class AppSettings {
   public init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
     // Assigning in init does NOT fire didSet → no redundant write-back.
-    self.selectedModel = defaults.string(forKey: Key.selectedModel) ?? "claude-sonnet-4-6"
+    // Migrate any retired model id a returning user has persisted (e.g. the
+    // old Sonnet/Opus 4.6 ids) to its current equivalent, so requests don't
+    // 404 against a removed model and the Settings picker shows a selection.
+    let storedModel = defaults.string(forKey: Key.selectedModel)
+    let migratedModel = Self.migrateModel(storedModel) ?? "claude-sonnet-5"
+    self.selectedModel = migratedModel
+    if let storedModel, storedModel != migratedModel {
+      defaults.set(migratedModel, forKey: Key.selectedModel)
+    }
     self.voiceEnabled = defaults.object(forKey: Key.voiceEnabled) as? Bool ?? true
     self.voiceIdentifier = defaults.string(forKey: Key.voiceIdentifier) ?? "com.apple.voice.compact.de-DE.Anna"
     self.replaceSelectionByDefault = defaults.bool(forKey: Key.replaceSelectionByDefault)
@@ -171,6 +179,17 @@ public final class AppSettings {
     self.dictationProfessionalPrompt = defaults.string(forKey: Key.dictationProfessionalPrompt) ?? Self.defaultProfessionalPrompt
     self.customVocabulary = Self.parseVocabulary(defaults.string(forKey: Key.customVocabulary) ?? "")
     self.localModelName = defaults.string(forKey: Key.localModelName) ?? "openai_whisper-small_216MB"
+  }
+
+  /// Retired-model → current-model remap, applied on load.
+  private static let modelMigrations: [String: String] = [
+    "claude-sonnet-4-6": "claude-sonnet-5",
+    "claude-opus-4-6": "claude-opus-4-8",
+  ]
+
+  private static func migrateModel(_ stored: String?) -> String? {
+    guard let stored else { return nil }
+    return modelMigrations[stored] ?? stored
   }
 
   private static func parseVocabulary(_ raw: String) -> [String] {

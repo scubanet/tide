@@ -5,7 +5,7 @@ final class AppSettingsTests: XCTestCase {
   @MainActor
   func testDefaultsAreSensible() {
     let s = AppSettings(defaults: UserDefaults(suiteName: "test.\(UUID().uuidString)")!)
-    XCTAssertEqual(s.selectedModel, "claude-sonnet-4-6")
+    XCTAssertEqual(s.selectedModel, "claude-sonnet-5")
     XCTAssertTrue(s.voiceEnabled)
     XCTAssertEqual(s.voiceIdentifier, "com.apple.voice.compact.de-DE.Anna")
     XCTAssertFalse(s.replaceSelectionByDefault)
@@ -16,16 +16,25 @@ final class AppSettingsTests: XCTestCase {
     let suite = "test.\(UUID().uuidString)"
     let defs = UserDefaults(suiteName: suite)!
     let s = AppSettings(defaults: defs)
-    s.selectedModel = "claude-opus-4-6"
+    s.selectedModel = "claude-opus-4-8"
     s.voiceEnabled = false
     s.voiceIdentifier = "com.apple.voice.premium.de-DE.Petra"
     s.replaceSelectionByDefault = true
 
     let reloaded = AppSettings(defaults: defs)
-    XCTAssertEqual(reloaded.selectedModel, "claude-opus-4-6")
+    XCTAssertEqual(reloaded.selectedModel, "claude-opus-4-8")
     XCTAssertFalse(reloaded.voiceEnabled)
     XCTAssertEqual(reloaded.voiceIdentifier, "com.apple.voice.premium.de-DE.Petra")
     XCTAssertTrue(reloaded.replaceSelectionByDefault)
+  }
+
+  @MainActor
+  func testRetiredModelIdMigratesToCurrent() {
+    let defs = UserDefaults(suiteName: "test.\(UUID().uuidString)")!
+    defs.set("claude-sonnet-4-6", forKey: "tide.selectedModel")
+    let s = AppSettings(defaults: defs)
+    XCTAssertEqual(s.selectedModel, "claude-sonnet-5", "retired id remapped in memory")
+    XCTAssertEqual(defs.string(forKey: "tide.selectedModel"), "claude-sonnet-5", "and persisted")
   }
 
   @MainActor
