@@ -1,7 +1,6 @@
 import Foundation
 import OSLog
 import AppKit
-import UserNotifications
 import Core
 import LLM
 import TideSpeech
@@ -60,7 +59,14 @@ final class DictationCoordinator {
   /// polish prompt. Constructed up-front so `stop()` can call it
   /// synchronously on the transform branches.
   private let polisher: DictationPolisher
-  private var recorder: AudioRecorder?
+  /// Test seams: production defaults build the real recorder via
+  /// `RecordingSession` and inject via `TextInjector`/`TideNotification`;
+  /// tests substitute fakes so the stop()/reject/transform/fallback
+  /// paths run without microphone, key events or notification center.
+  private let makeRecorder: @MainActor (AppSettings) -> any DictationRecording
+  private let insertText: @MainActor (String) async -> TextInjector.Result
+  private let notifyPolishFailed: @MainActor () async -> Void
+  private var recorder: (any DictationRecording)?
   private var currentMode: DictationMode = .raw
   /// Visual feedback (menubar tint + floating pill). Optional because
   /// `MenubarController` (which owns the `NSStatusItem`) is built before
@@ -79,10 +85,30 @@ final class DictationCoordinator {
     category: "dictation"
   )
 
-  init(settings: AppSettings, provider: any LLMProvider) {
+  init(
+    settings: AppSettings,
+    provider: any LLMProvider,
+    makeRecorder: @escaping @MainActor (AppSettings) -> any DictationRecording = {
+      RecordingSession.makeRecorder(settings: $0)
+    },
+    insertText: @escaping @MainActor (String) async -> TextInjector.Result = {
+      await TextInjector.insert($0)
+    },
+    notifyPolishFailed: @escaping @MainActor () async -> Void = {
+      // Lazy authorization on first use; denial degrades silently (the
+      // raw text was already injected, a missing toast isn't blocking).
+      await TideNotification.post(
+        body: "Polish-Modus fehlgeschlagen, Rohtext eingefügt",
+        idPrefix: "tide.dictation.polishfailed"
+      )
+    }
+  ) {
     self.settings = settings
     self.provider = provider
     self.polisher = DictationPolisher(provider: provider, settings: settings)
+    self.makeRecorder = makeRecorder
+    self.insertText = insertText
+    self.notifyPolishFailed = notifyPolishFailed
   }
 
   /// Inject the visual indicator after construction. AppEntry calls this
@@ -102,7 +128,7 @@ final class DictationCoordinator {
     currentMode = mode
     // Build the recognizer + recorder via the shared factory so we use
     // the exact same code path as the panel-side push-to-talk flow.
-    let rec = RecordingSession.makeRecorder(settings: settings)
+    let rec = makeRecorder(settings)
     self.recorder = rec
     do {
       try await rec.start()
@@ -151,7 +177,7 @@ final class DictationCoordinator {
     do {
       let finalText = try await rec.stop()
       let trimmed = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
-      let duration = rec.bufferAccumulator.duration
+      let duration = rec.duration
       Self.logger.debug("final transcript (mode \(String(describing: self.currentMode), privacy: .public)): \(trimmed.count) chars (\(duration, privacy: .public)s)")
       guard !TranscriptionQuality.isReject(trimmed, duration: duration) else {
         // Too short / likely a hallucination. Flash a hint on the pill
@@ -162,19 +188,19 @@ final class DictationCoordinator {
         return
       }
       if self.currentMode.isRaw {
-        let result = await TextInjector.insert(trimmed)
+        let result = await insertText(trimmed)
         Self.logger.debug("text-injector result: \(String(describing: result), privacy: .public)")
       } else {
         let base = self.currentMode.basePrompt(from: settings) ?? ""
         do {
           let transformed = try await polisher.polish(trimmed, basePrompt: base)
-          let result = await TextInjector.insert(transformed)
+          let result = await insertText(transformed)
           Self.logger.debug("transform (\(self.currentMode.rawValue, privacy: .public)) result: \(String(describing: result), privacy: .public)")
         } catch {
           Self.logger.warning(
             "transform failed: \(String(describing: error), privacy: .public) — injecting raw"
           )
-          let result = await TextInjector.insert(trimmed)
+          let result = await insertText(trimmed)
           Self.logger.debug(
             "transform-fallback (raw) result: \(String(describing: result), privacy: .public)"
           )
@@ -186,13 +212,4 @@ final class DictationCoordinator {
     }
   }
 
-  /// Post a "polish failed, raw text inserted" user notification. Lazy
-  /// authorization on first use, denial degrades silently (the raw text
-  /// was already injected, so a missing toast is not user-blocking).
-  private func notifyPolishFailed() async {
-    await TideNotification.post(
-      body: "Polish-Modus fehlgeschlagen, Rohtext eingefügt",
-      idPrefix: "tide.dictation.polishfailed"
-    )
-  }
 }

@@ -13,10 +13,9 @@
 **Behoben und verifiziert (Build clean, 56 App-Tests + alle Package-Tests grün):**
 §2.1–2.6, §3.1–3.4, §4.1, §4.2, §5.1–5.6, §6.1, §6.2, §7.1–7.7, §8.1–8.5, §9.1 (TTS als `SpeechPlayback` extrahiert), §9.2–9.5.
 
-**Zusätzlich umgesetzt:** §4.3 App Intents (Diktat starten/stoppen mit Modus-Parameter, Panel öffnen; `AppShortcutsProvider` mit deutschen Siri-Phrasen); §4.4 Sparkle auf 2.9.4.
+**Zusätzlich umgesetzt:** §4.3 App Intents (Diktat starten/stoppen mit Modus-Parameter, Panel öffnen; `AppShortcutsProvider` mit deutschen Siri-Phrasen); §4.4 Sparkle auf 2.9.4; §9.6 vollständig — `DictationRecording`-Protokoll + Injection-Nähte im Coordinator, 8 `DictationCoordinatorTests` decken Reject-, Raw-, Transform-, Transform-Fail→Raw-, Superseded- und Start-Fehler-Pfade ab.
 
 **Offen (bewusst):**
-- §9.6 teilweise — `CompositeSynthesizer`-Tests + `isReject`-Tests neu; DictationCoordinator-E2E braucht erst eine Recorder-Injection-Naht (größerer Umbau).
 - §9.7 SwiftLint/SwiftFormat — nicht eingerichtet (Low, Stil ist konsistent).
 - macOS-27-Beta-Runtimetest (TCC, Injection, Sparkle-Update, Glass-Optik) — manuell nötig.
 
