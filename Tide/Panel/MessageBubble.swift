@@ -5,6 +5,15 @@ import AppKit
 
 struct MessageBubble: View {
   let message: Message
+  /// True while this bubble's content is still streaming in. Live bubbles
+  /// render plain text — parsing the whole (growing) message as Markdown
+  /// on every token is O(n²) over a long reply. The finished bubble
+  /// renders Markdown once when streaming ends.
+  var isLive: Bool = false
+  /// Whether the preceding user message carried selection context (the
+  /// "Ersetzen" button then makes sense). Computed once in `MessageList`
+  /// — deriving it here would re-walk the conversation per render.
+  var hasSelectionContext: Bool = false
   /// Closure the bubble calls when the user taps "Replace selection".
   var onReplace: ((String) -> Void)? = nil
 
@@ -28,7 +37,7 @@ struct MessageBubble: View {
               copyToClipboard(message.content)
             } label: {
               Label("Kopieren", systemImage: "doc.on.doc")
-                .font(.system(size: 11))
+                .font(.subheadline)
             }
             .buttonStyle(.borderless)
             .foregroundStyle(.secondary)
@@ -38,7 +47,7 @@ struct MessageBubble: View {
                 onReplace(message.content)
               } label: {
                 Label("Ersetzen", systemImage: "arrow.uturn.forward.square")
-                  .font(.system(size: 11))
+                  .font(.subheadline)
               }
               .buttonStyle(.borderless)
               .foregroundStyle(.secondary)
@@ -59,6 +68,7 @@ struct MessageBubble: View {
   /// failure we fall back to the raw string.
   private var rendered: AttributedString {
     if message.content.isEmpty { return AttributedString("…") }
+    if isLive { return AttributedString(message.content) }
     if let attributed = try? AttributedString(
       markdown: message.content,
       options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
@@ -71,19 +81,5 @@ struct MessageBubble: View {
   private func copyToClipboard(_ text: String) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(text, forType: .string)
-  }
-
-  /// True when the preceding user message in this conversation carries a
-  /// `selectionContextJSON` — i.e. this assistant turn was driven by a
-  /// selection from another app and a Replace button makes sense.
-  private var hasSelectionContext: Bool {
-    guard let conv = message.conversation else { return false }
-    let ordered = conv.orderedMessages
-    guard let myIndex = ordered.firstIndex(where: { $0.id == message.id }) else { return false }
-    // Walk backwards; find the most recent preceding user message.
-    for i in stride(from: myIndex - 1, through: 0, by: -1) where ordered[i].role == .user {
-      return ordered[i].selectionContextJSON != nil
-    }
-    return false
   }
 }

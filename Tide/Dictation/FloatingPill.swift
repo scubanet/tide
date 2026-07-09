@@ -26,19 +26,29 @@ struct PillContents: View {
   @Bindable var state: PillViewState
 
   var body: some View {
+    // Liquid Glass on macOS 26+ so the pill participates in the user's
+    // system glass appearance (incl. the macOS 27 opacity preference);
+    // legacy blur material as the fallback chrome on older systems.
+    if #available(macOS 26.0, *) {
+      core.glassEffect(.regular, in: .rect(cornerRadius: 8))
+    } else {
+      core.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+    }
+  }
+
+  private var core: some View {
     HStack(spacing: 8) {
       Circle()
         .fill(state.isHint ? Color.secondary : Color.red)
         .frame(width: 8, height: 8)
       Text(displayText)
-        .font(.system(size: 12))
+        .font(.callout)
         .foregroundStyle(.primary)
         .lineLimit(1)
       Spacer(minLength: 0)
     }
     .padding(.horizontal, 12)
     .padding(.vertical, 8)
-    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
   }
 
   private var displayText: String {

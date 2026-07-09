@@ -9,7 +9,7 @@ struct OnboardingView: View {
   let onClose: () -> Void
 
   @State private var step: OnboardingStep = .welcome
-  @State private var hasKey = KeychainHelper.get(key: "anthropic.api_key")?.isEmpty == false
+  @State private var hasKey = KeychainHelper.get(key: KeychainKey.anthropic)?.isEmpty == false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {

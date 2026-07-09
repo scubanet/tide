@@ -36,7 +36,7 @@ struct QuickActionsBar: View {
     var body: some View {
       Button(action: onTap) {
         Text(action.label)
-          .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+          .font(.callout.weight(isSelected ? .semibold : .medium))
           .foregroundStyle(isSelected ? Color.white : Color.primary)
           .padding(.horizontal, 11)
           .padding(.vertical, 5)
@@ -44,6 +44,7 @@ struct QuickActionsBar: View {
           .clipShape(.capsule)
       }
       .buttonStyle(.plain)
+      .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
   }
 }

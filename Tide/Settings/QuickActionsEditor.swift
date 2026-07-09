@@ -15,7 +15,7 @@ struct QuickActionsEditor: View {
         ForEach(library.all().filter { $0.isBuiltIn }) { action in
           HStack {
             Text(action.label)
-              .font(.system(size: 13))
+              .font(.body)
             Spacer()
             Text(action.systemPrompt)
               .font(.caption)
@@ -39,7 +39,7 @@ struct QuickActionsEditor: View {
             HStack {
               VStack(alignment: .leading, spacing: 2) {
                 Text(action.label)
-                  .font(.system(size: 13, weight: .medium))
+                  .font(.body.weight(.medium))
                 Text(action.systemPrompt)
                   .font(.caption)
                   .foregroundStyle(.secondary)

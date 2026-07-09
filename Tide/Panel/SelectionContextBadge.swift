@@ -11,9 +11,9 @@ struct SelectionContextBadge: View {
         .foregroundStyle(Color.accentColor)
       VStack(alignment: .leading, spacing: 1) {
         Text(selection.sourceAppName.isEmpty ? "Selektion" : "Selektion aus \(selection.sourceAppName)")
-          .font(.system(size: 11, weight: .semibold))
+          .font(.subheadline.weight(.semibold))
         Text("\(selection.text.count) Zeichen")
-          .font(.system(size: 10))
+          .font(.footnote)
           .foregroundStyle(.secondary)
       }
       Spacer()
@@ -22,6 +22,7 @@ struct SelectionContextBadge: View {
           .foregroundStyle(.secondary)
       }
       .buttonStyle(.plain)
+      .accessibilityLabel("Selektion verwerfen")
     }
     .padding(.horizontal, 10)
     .padding(.vertical, 6)

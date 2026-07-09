@@ -44,4 +44,15 @@ public enum TranscriptionQuality {
     }
     return false
   }
+
+  /// Combined gate used after a recording session ends: reject when the
+  /// (already-trimmed) transcript is empty, the recording was too short,
+  /// or the text looks like an ASR hallucination. One call site each in
+  /// the panel flow and the standalone dictation flow — keep the
+  /// heuristic in sync by construction.
+  public static func isReject(_ trimmedText: String, duration: TimeInterval) -> Bool {
+    trimmedText.isEmpty
+      || shouldRejectRecording(duration: duration)
+      || isLikelyArtifact(trimmedText, recordingDuration: duration)
+  }
 }

@@ -63,3 +63,24 @@ final class TranscriptionQualityTests: XCTestCase {
     XCTAssertFalse(TranscriptionQuality.isLikelyArtifact(text, recordingDuration: 1.5))
   }
 }
+
+// MARK: - isReject (combined gate)
+
+extension TranscriptionQualityTests {
+  func test_isReject_emptyText() {
+    XCTAssertTrue(TranscriptionQuality.isReject("", duration: 2.0))
+  }
+
+  func test_isReject_tooShortRecording() {
+    XCTAssertTrue(TranscriptionQuality.isReject("hallo welt", duration: 0.2))
+  }
+
+  func test_isReject_artifact() {
+    let text = String(repeating: "a ", count: 30)
+    XCTAssertTrue(TranscriptionQuality.isReject(text, duration: 0.7))
+  }
+
+  func test_isReject_acceptsRealSpeech() {
+    XCTAssertFalse(TranscriptionQuality.isReject("Das ist ein normaler Satz.", duration: 2.0))
+  }
+}

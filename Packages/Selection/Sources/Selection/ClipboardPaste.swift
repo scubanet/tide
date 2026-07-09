@@ -14,7 +14,7 @@ public enum ClipboardPaste {
   @discardableResult
   public static func paste(_ text: String) async -> Bool {
     let pasteboard = NSPasteboard.general
-    let oldContents = pasteboard.string(forType: .string)
+    let oldContents = PasteboardSnapshot(pasteboard)
     pasteboard.clearContents()
     pasteboard.setString(text, forType: .string)
     // Remember the change count of OUR write so the delayed restore can
@@ -38,8 +38,7 @@ public enum ClipboardPaste {
       // If the user copied something new during the window, leave their
       // fresh clipboard alone instead of clobbering it with stale data.
       guard pasteboard.changeCount == injectedChangeCount else { return }
-      pasteboard.clearContents()
-      if let old = oldContents { pasteboard.setString(old, forType: .string) }
+      oldContents.restore(to: pasteboard)
     }
     return true
   }

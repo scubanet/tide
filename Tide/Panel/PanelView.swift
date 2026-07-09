@@ -8,7 +8,7 @@ struct PanelView: View {
   let chatViewModel: ChatViewModel
   var onOpenSettings: () -> Void = {}
   var onCheckForUpdates: () -> Void = {}
-  @State private var hasKey: Bool = KeychainHelper.get(key: "anthropic.api_key") != nil
+  @State private var hasKey: Bool = KeychainHelper.get(key: KeychainKey.anthropic)?.isEmpty == false
 
   var body: some View {
     VStack(spacing: 0) {
@@ -22,10 +22,15 @@ struct PanelView: View {
       if hasKey {
         ChatContainer(viewModel: chatViewModel)
       } else {
-        ApiKeyPromptView(hasKey: $hasKey)
+        ApiKeyPromptView()
       }
     }
     .frame(width: 400, height: 560)
+    // Key can be saved/deleted in onboarding or Settings while this
+    // panel lives on — re-check instead of trusting the init snapshot.
+    .onReceive(NotificationCenter.default.publisher(for: .tideApiKeyChanged)) { _ in
+      hasKey = KeychainHelper.get(key: KeychainKey.anthropic)?.isEmpty == false
+    }
   }
 }
 

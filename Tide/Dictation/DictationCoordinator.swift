@@ -42,24 +42,23 @@ enum DictationMode: String, CaseIterable, Sendable {
 /// app they were typing in, and the final transcript is delivered into
 /// that app's text cursor (Phase D) without Tide stealing focus.
 ///
-/// **Phase B scope (this file's current state):**
-///   - Owns its own `AudioRecorder` + recognizer via `RecognizerFactory`.
-///   - `start(mode:)` begins recording; `stop()` ends it and logs the
-///     final transcript.
-///   - No indicator UI yet (Phase C), no text injection (Phase D),
-///     no polish step (Phase E). The `provider` is wired in early so
-///     Phase E only has to use it.
+/// Owns its own `AudioRecorder` + recognizer via `RecognizerFactory`.
+/// `start(mode:)` begins recording and shows the floating pill;
+/// `stop()` finalizes the transcript, optionally runs it through the
+/// transform prompt (`DictationPolisher`, with raw-text fallback on
+/// failure), and inserts the result at the frontmost app's cursor via
+/// `TextInjector`.
 ///
 /// Concurrency: a second `start(mode:)` while `isActive` is dropped
 /// (logged, ignored). Single source of truth: `recorder != nil`.
 @MainActor
 final class DictationCoordinator {
   private let settings: AppSettings
-  /// Wired now, used in Phase E for the polished-mode Claude call.
+  /// Used for the transform-mode Claude call.
   private let provider: any LLMProvider
-  /// Phase E: runs the raw transcript through Claude with the user's
-  /// editable polish prompt. Constructed up-front so `stop()` can call
-  /// it synchronously on the .polished branch.
+  /// Runs the raw transcript through Claude with the user's editable
+  /// polish prompt. Constructed up-front so `stop()` can call it
+  /// synchronously on the transform branches.
   private let polisher: DictationPolisher
   private var recorder: AudioRecorder?
   private var currentMode: DictationMode = .raw
@@ -103,23 +102,7 @@ final class DictationCoordinator {
     currentMode = mode
     // Build the recognizer + recorder via the shared factory so we use
     // the exact same code path as the panel-side push-to-talk flow.
-    let choice = SpeechRecognizerChoice(rawValue: settings.speechRecognizer) ?? .default
-    let apiKey = KeychainHelper.get(key: "elevenlabs.api_key")
-    let accumulator = AudioBufferAccumulator()
-    let localStore = WhisperModelStore()
-    let recognizer = RecognizerFactory.make(
-      for: choice,
-      apiKey: apiKey,
-      accumulator: accumulator,
-      vocabulary: settings.customVocabulary,
-      localModelName: settings.localModelName,
-      localModelInstalled: localStore.isInstalled(settings.localModelName),
-      transcriber: LocalTranscriberHolder.shared.transcriber
-    )
-    let rec = AudioRecorder(
-      recognizer: recognizer,
-      bufferAccumulator: accumulator
-    )
+    let rec = RecordingSession.makeRecorder(settings: settings)
     self.recorder = rec
     do {
       try await rec.start()
@@ -149,11 +132,10 @@ final class DictationCoordinator {
     }
   }
 
-  /// End the in-flight dictation session. No-op if idle.
-  ///
-  /// Phase B: logs the final transcript to OSLog and stops. Phases D/E
-  /// will route the trimmed text through `TextInjector` (and, for
-  /// `.polished`, through `DictationPolisher` first).
+  /// End the in-flight dictation session. No-op if idle. Finalizes the
+  /// transcript, applies the transform prompt when the mode asks for one
+  /// (raw fallback on failure), and inserts the result at the frontmost
+  /// app's cursor.
   func stop() async {
     guard let rec = recorder else { return }
     self.recorder = nil
@@ -170,11 +152,8 @@ final class DictationCoordinator {
       let finalText = try await rec.stop()
       let trimmed = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
       let duration = rec.bufferAccumulator.duration
-      Self.logger.debug("final transcript (mode \(String(describing: self.currentMode), privacy: .public)): '\(trimmed, privacy: .public)' (\(duration, privacy: .public)s)")
-      let isReject = trimmed.isEmpty
-        || TranscriptionQuality.shouldRejectRecording(duration: duration)
-        || TranscriptionQuality.isLikelyArtifact(trimmed, recordingDuration: duration)
-      guard !isReject else {
+      Self.logger.debug("final transcript (mode \(String(describing: self.currentMode), privacy: .public)): \(trimmed.count) chars (\(duration, privacy: .public)s)")
+      guard !TranscriptionQuality.isReject(trimmed, duration: duration) else {
         // Too short / likely a hallucination. Flash a hint on the pill
         // (it was already hidden before the await) instead of inserting
         // garbage at the user's cursor.
@@ -210,34 +189,10 @@ final class DictationCoordinator {
   /// Post a "polish failed, raw text inserted" user notification. Lazy
   /// authorization on first use, denial degrades silently (the raw text
   /// was already injected, so a missing toast is not user-blocking).
-  ///
-  /// `UNUserNotificationCenter.requestAuthorization` is idempotent, so
-  /// calling it here as well as inside `TextInjector` is fine — the
-  /// system collapses repeat requests to the cached grant/deny answer
-  /// without prompting twice.
   private func notifyPolishFailed() async {
-    let center = UNUserNotificationCenter.current()
-    let granted = (try? await center.requestAuthorization(options: [.alert])) ?? false
-    guard granted else {
-      Self.logger.warning(
-        "notification permission denied — polish-failed notice skipped"
-      )
-      return
-    }
-    let content = UNMutableNotificationContent()
-    content.title = "Tide — Diktat"
-    content.body = "Polish-Modus fehlgeschlagen, Rohtext eingefügt"
-    let request = UNNotificationRequest(
-      identifier: "tide.dictation.polishfailed.\(UUID().uuidString)",
-      content: content,
-      trigger: nil
+    await TideNotification.post(
+      body: "Polish-Modus fehlgeschlagen, Rohtext eingefügt",
+      idPrefix: "tide.dictation.polishfailed"
     )
-    do {
-      try await center.add(request)
-    } catch {
-      Self.logger.warning(
-        "posting polish-failed notification failed: \(error.localizedDescription, privacy: .public)"
-      )
-    }
   }
 }

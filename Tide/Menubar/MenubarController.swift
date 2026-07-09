@@ -165,8 +165,8 @@ final class MenubarController: NSObject {
   /// Capture the current selection from the frontmost app. Must be called
   /// BEFORE bringing Tide to the front — otherwise the prior app loses
   /// focus and AX can't read its selection any more.
-  func capturePendingSelection() {
-    let selection = SelectionReader.readFromFrontmostApp()
+  func capturePendingSelection() async {
+    let selection = await SelectionReader.readFromFrontmostApp()
     chatViewModel.pendingSelection = selection
   }
 

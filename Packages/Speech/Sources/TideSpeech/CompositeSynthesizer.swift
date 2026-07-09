@@ -4,7 +4,7 @@ import Foundation
 /// app keeps a single `CompositeSynthesizer` and updates its `provider`
 /// via `setProvider(_:)` when the user changes the setting. Switching
 /// providers stops the previously-active one.
-public final class CompositeSynthesizer: Synthesizer, @unchecked Sendable {
+public final class CompositeSynthesizer: Synthesizer {
   public enum Provider: String, Sendable {
     case apple
     case elevenLabs
@@ -12,7 +12,6 @@ public final class CompositeSynthesizer: Synthesizer, @unchecked Sendable {
 
   private let apple: any Synthesizer
   private let elevenLabs: (any Synthesizer)?
-  private let lock = NSLock()
   private var provider: Provider
 
   public init(
@@ -26,32 +25,23 @@ public final class CompositeSynthesizer: Synthesizer, @unchecked Sendable {
   }
 
   public func setProvider(_ provider: Provider) {
-    lock.lock()
     let previousProvider = self.provider
-    let changed = previousProvider != provider
-    let prev: any Synthesizer = {
-      switch previousProvider {
-      case .apple: return apple
-      case .elevenLabs: return elevenLabs ?? apple
-      }
-    }()
     self.provider = provider
-    lock.unlock()
-    if changed { prev.stop() }
+    if previousProvider != provider {
+      resolve(previousProvider).stop()
+    }
   }
 
-  public var currentProvider: Provider {
-    lock.lock(); defer { lock.unlock() }
-    return provider
-  }
+  public var currentProvider: Provider { provider }
 
-  private var active: any Synthesizer {
-    lock.lock(); defer { lock.unlock() }
+  private func resolve(_ provider: Provider) -> any Synthesizer {
     switch provider {
     case .apple: return apple
     case .elevenLabs: return elevenLabs ?? apple
     }
   }
+
+  private var active: any Synthesizer { resolve(provider) }
 
   public var isSpeaking: Bool { active.isSpeaking }
   public func speak(_ text: String) { active.speak(text) }

@@ -5,18 +5,16 @@ import TideSpeech
 
 struct VoiceSection: View {
   let settings: AppSettings
-  @State private var elevenLabsKey: String = KeychainHelper.get(key: "elevenlabs.api_key") ?? ""
+  @State private var elevenLabsKey: String = KeychainHelper.get(key: KeychainKey.elevenLabs) ?? ""
   @State private var elevenLabsVoices: [ElevenLabsClient.Voice] = []
   @State private var fetchingVoices = false
   @State private var fetchError: String?
   @State private var showRecognizerKeyMissingHint = false
   @State private var showLocalModelMissingHint = false
 
-  private var appleVoices: [AVSpeechSynthesisVoice] {
-    AVSpeechSynthesisVoice.speechVoices()
-      .filter { $0.language.hasPrefix("de") || $0.language.hasPrefix("en") }
-      .sorted { $0.name < $1.name }
-  }
+  /// Loaded once in `.task` — `speechVoices()` enumerates every installed
+  /// system voice, too heavy to re-run on each body evaluation.
+  @State private var appleVoices: [AVSpeechSynthesisVoice] = []
 
   var body: some View {
     @Bindable var settings = settings
@@ -53,7 +51,7 @@ struct VoiceSection: View {
             .textFieldStyle(.roundedBorder)
           HStack {
             Button("Key speichern + Stimmen laden") {
-              try? KeychainHelper.set(key: "elevenlabs.api_key", value: elevenLabsKey)
+              try? KeychainHelper.set(key: KeychainKey.elevenLabs, value: elevenLabsKey)
               fetchVoices()
             }
             .disabled(elevenLabsKey.isEmpty)
@@ -152,6 +150,9 @@ struct VoiceSection: View {
     }
     .formStyle(.grouped)
     .task {
+      appleVoices = AVSpeechSynthesisVoice.speechVoices()
+        .filter { $0.language.hasPrefix("de") || $0.language.hasPrefix("en") }
+        .sorted { $0.name < $1.name }
       if settings.ttsProvider == "elevenLabs", !elevenLabsKey.isEmpty {
         fetchVoices()
       }

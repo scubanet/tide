@@ -192,24 +192,9 @@ public enum TextInjector {
   /// pasteboard either way.
   private static func postPasteboardNotification() async {
     guard _notificationsEnabled else { return }
-    let center = UNUserNotificationCenter.current()
-    let granted = (try? await center.requestAuthorization(options: [.alert])) ?? false
-    guard granted else {
-      log.warning("notification permission denied — text on pasteboard, no toast")
-      return
-    }
-    let content = UNMutableNotificationContent()
-    content.title = "Tide — Diktat"
-    content.body = "Diktat in Zwischenablage — ⌘V drücken"
-    let request = UNNotificationRequest(
-      identifier: "tide.dictation.clipboard.\(UUID().uuidString)",
-      content: content,
-      trigger: nil
+    await TideNotification.post(
+      body: "Diktat in Zwischenablage — ⌘V drücken",
+      idPrefix: "tide.dictation.clipboard"
     )
-    do {
-      try await center.add(request)
-    } catch {
-      log.warning("posting pasteboard notification failed: \(error.localizedDescription, privacy: .public)")
-    }
   }
 }

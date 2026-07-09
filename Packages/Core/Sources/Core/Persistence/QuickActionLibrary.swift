@@ -26,6 +26,11 @@ public final class QuickActionLibrary {
     return actions
   }
 
+  /// Posted after any mutation (`add`/`update`/`delete`) so caches of
+  /// `all()` — e.g. the panel's quick-action bar — can reload instead of
+  /// re-decoding the UserDefaults blob on every access.
+  public static let didChange = Notification.Name("tide.quickActionsChanged")
+
   /// Append a new custom action.
   public func add(_ action: QuickAction) {
     var current = custom()
@@ -73,6 +78,7 @@ public final class QuickActionLibrary {
   private func save(_ list: [QuickAction]) {
     if let data = try? JSONEncoder().encode(list) {
       defaults.set(data, forKey: key)
+      NotificationCenter.default.post(name: Self.didChange, object: nil)
     }
   }
 }

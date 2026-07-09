@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import OSLog
 import Core
 import Hotkeys
 import KeyboardShortcuts
@@ -78,16 +79,27 @@ final class TideAppDelegate: NSObject, NSApplicationDelegate {
         // spike on the first dictation. No CoreML cost when Local is off.
         let localStore = WhisperModelStore()
         let transcriber = WhisperKitTranscriber(store: localStore)
-        LocalTranscriberHolder.shared.transcriber = transcriber
+        LocalTranscriberHolder.shared.install(transcriber)
         let localChoice = SpeechRecognizerChoice(rawValue: settings.speechRecognizer)
         if (localChoice == .whisperKit || localChoice == .hybridLocal),
            localStore.isInstalled(settings.localModelName) {
           let modelName = settings.localModelName
-          Task.detached { try? await transcriber.prewarm(modelName: modelName) }
+          // Plain Task — the transcriber is an actor, so no detachment is
+          // needed for isolation, and a failed warm-up should be visible.
+          Task {
+            do { try await transcriber.prewarm(modelName: modelName) }
+            catch {
+              Logger(subsystem: "swiss.weckherlin.tide", category: "whisperkit")
+                .error("prewarm failed: \(error.localizedDescription, privacy: .public)")
+            }
+          }
         }
 
-        let apiKey = KeychainHelper.get(key: "anthropic.api_key") ?? ""
-        let provider = AnthropicProvider(apiKey: apiKey)
+        // Key is read per request, so a key saved later in onboarding or
+        // Settings takes effect without a relaunch.
+        let provider = AnthropicProvider(apiKeyProvider: {
+          KeychainHelper.get(key: KeychainKey.anthropic) ?? ""
+        })
 
         // Sparkle: create the updater (skipped under tests — it would reach
         // out to the network appcast). Held on the delegate for its lifetime.
@@ -103,14 +115,15 @@ final class TideAppDelegate: NSObject, NSApplicationDelegate {
           conversationStore: store,
           settings: settings,
           provider: provider,
-          onCheckForUpdates: { [weak self] in
-            self?.updaterController?.checkForUpdates(nil)
+          onCheckForUpdates: { [weak updater = self.updaterController] in
+            updater?.checkForUpdates(nil)
           }
         )
         self.menubarController = controller
+        TideIntentTargets.shared.menubarController = controller
 
         // First-run onboarding: no Anthropic key yet → guide setup.
-        let hasOnboardingKey = KeychainHelper.get(key: "anthropic.api_key")?.isEmpty == false
+        let hasOnboardingKey = KeychainHelper.get(key: KeychainKey.anthropic)?.isEmpty == false
         if !hasOnboardingKey {
           controller.openOnboarding()
         }
@@ -118,12 +131,12 @@ final class TideAppDelegate: NSObject, NSApplicationDelegate {
         self.pushToTalk = PushToTalkHandler(
           onPress: { [weak controller] in
             guard let controller else { return }
-            // Capture selection BEFORE bringing Tide to the front —
-            // otherwise the prior app loses focus and AX can't read its
-            // selection any more.
-            controller.capturePendingSelection()
-            controller.openPanel()
             Task { @MainActor in
+              // Capture selection BEFORE bringing Tide to the front —
+              // otherwise the prior app loses focus and AX can't read its
+              // selection any more.
+              await controller.capturePendingSelection()
+              controller.openPanel()
               await controller.chatViewModel.startRecording()
             }
           },
@@ -145,6 +158,7 @@ final class TideAppDelegate: NSObject, NSApplicationDelegate {
           provider: provider
         )
         self.dictationCoordinator = dictation
+        TideIntentTargets.shared.dictationCoordinator = dictation
         // Phase C: pair the dictation coordinator with the menubar's
         // existing status item so it can tint the icon red and show a
         // floating pill while a session is in flight. The indicator
@@ -192,7 +206,8 @@ final class TideAppDelegate: NSObject, NSApplicationDelegate {
           Task { @MainActor in await dictation.stop() }
         }
       } catch {
-        NSLog("Tide: failed to init store: \(error)")
+        Logger(subsystem: "swiss.weckherlin.tide", category: "app")
+          .error("failed to init store: \(error)")
       }
     }
   }

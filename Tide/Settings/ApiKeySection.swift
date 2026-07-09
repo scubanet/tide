@@ -2,8 +2,7 @@ import SwiftUI
 import Core
 
 struct ApiKeySection: View {
-  @State private var input: String = ""
-  @State private var hasExistingKey: Bool = KeychainHelper.get(key: "anthropic.api_key") != nil
+  @State private var hasExistingKey: Bool = KeychainHelper.get(key: KeychainKey.anthropic)?.isEmpty == false
   @State private var savedToast: Bool = false
 
   var body: some View {
@@ -15,34 +14,26 @@ struct ApiKeySection: View {
               .foregroundStyle(.green)
             Spacer()
             Button("Zurücksetzen", role: .destructive) {
-              KeychainHelper.delete(key: "anthropic.api_key")
+              KeychainHelper.delete(key: KeychainKey.anthropic)
               hasExistingKey = false
-              input = ""
+              NotificationCenter.default.post(name: .tideApiKeyChanged, object: nil)
             }
           }
         }
-        SecureField("sk-ant-...", text: $input)
-          .textFieldStyle(.roundedBorder)
-        HStack {
-          Button("Speichern") {
-            do {
-              try KeychainHelper.set(key: "anthropic.api_key", value: input)
-              hasExistingKey = true
-              input = ""
-              savedToast = true
-              DispatchQueue.main.asyncAfter(deadline: .now() + 2) { savedToast = false }
-            } catch {
-              // ignore — sensible default
-            }
-          }
-          .disabled(input.isEmpty)
-          if savedToast {
-            Text("Gespeichert ✓")
-              .foregroundStyle(.green)
-              .font(.callout)
+        ApiKeyField {
+          hasExistingKey = true
+          savedToast = true
+          Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            savedToast = false
           }
         }
-        Text("Erstellbar unter console.anthropic.com. Neu starten nach Änderung.")
+        if savedToast {
+          Text("Gespeichert ✓")
+            .foregroundStyle(.green)
+            .font(.callout)
+        }
+        Text("Erstellbar unter console.anthropic.com. Gilt sofort — kein Neustart nötig.")
           .font(.caption)
           .foregroundStyle(.secondary)
       } header: {

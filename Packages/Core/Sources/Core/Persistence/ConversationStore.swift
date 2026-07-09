@@ -109,6 +109,13 @@ public final class ConversationStore {
     try context.save()
   }
 
+  /// Persist edits to already-inserted models (e.g. an assistant message
+  /// whose content streamed in after `append`). Unlike `append(_:to:)`
+  /// this never re-appends to the relationship array.
+  public func save() throws {
+    try context.save()
+  }
+
   /// Bump `updatedAt` so `conversation` becomes the active one, then
   /// persist. Used by the panel's history menu to switch conversations.
   public func touch(_ conversation: Conversation) {

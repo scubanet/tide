@@ -17,7 +17,10 @@ private let log = Logger(subsystem: "swiss.weckherlin.tide", category: "speech")
 /// because that thread-safety is provided by the lock rather than the
 /// type system.
 public final class AppleSpeechRecognizer: SpeechRecognizer, @unchecked Sendable {
-  private let recognizer: SFSpeechRecognizer
+  /// `nil` when `SFSpeechRecognizer` doesn't support the requested locale
+  /// on this machine. Surfaced as `SpeechRecognizerError.unavailable` from
+  /// `start()` — never a crash.
+  private let recognizer: SFSpeechRecognizer?
   private let contextualStrings: [String]
 
   /// Guards every mutable field below. The Speech callback and the caller
@@ -39,10 +42,10 @@ public final class AppleSpeechRecognizer: SpeechRecognizer, @unchecked Sendable 
     locale: Locale = Locale(identifier: "de-DE"),
     contextualStrings: [String] = []
   ) {
-    guard let recognizer = SFSpeechRecognizer(locale: locale) else {
-      fatalError("SFSpeechRecognizer unavailable for locale \(locale.identifier)")
+    self.recognizer = SFSpeechRecognizer(locale: locale)
+    if self.recognizer == nil {
+      log.error("SFSpeechRecognizer unavailable for locale \(locale.identifier, privacy: .public)")
     }
-    self.recognizer = recognizer
     self.contextualStrings = contextualStrings
   }
 
@@ -64,7 +67,7 @@ public final class AppleSpeechRecognizer: SpeechRecognizer, @unchecked Sendable 
     let status = await Self.requestAuthorization()
     log.debug("speech authorization status: \(status.rawValue)")
     guard status == .authorized else { throw SpeechRecognizerError.unauthorized }
-    guard recognizer.isAvailable else {
+    guard let recognizer, recognizer.isAvailable else {
       log.error("SFSpeechRecognizer not available")
       throw SpeechRecognizerError.unavailable
     }

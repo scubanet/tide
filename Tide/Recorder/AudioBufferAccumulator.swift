@@ -6,8 +6,15 @@ import OSLog
 /// Used by the ElevenLabs/Hybrid recognizers to assemble the full audio
 /// for batch-upload to Scribe.
 ///
-/// Thread-safe via internal NSLock — AudioRecorder taps may fire on the
-/// audio render thread.
+/// Thread-safe via internal NSLock — AudioRecorder's tap callback fires
+/// on AVAudioEngine's background tap thread, concurrently with
+/// `reset()`/`exportWAV()` from the main actor.
+///
+/// Real-time constraint: `append(_:)` allocates (deep copy) and takes a
+/// lock. That is fine on the tap thread, but this path must NEVER be
+/// moved into a hard real-time render callback (`AVAudioSourceNode`/
+/// render-block APIs) — allocation or lock contention there causes
+/// audible glitches.
 public final class AudioBufferAccumulator: @unchecked Sendable {
   private let lock = NSLock()
   private var chunks: [AVAudioPCMBuffer] = []
@@ -125,6 +132,14 @@ extension AudioBufferAccumulator {
           memcpy(dst[ch] + Int(writeOffset),
                  src[ch],
                  frames * MemoryLayout<Float>.size)
+        }
+      } else if let src = chunk.int16ChannelData, let dst = inputBuffer.int16ChannelData {
+        // Mirror of `copy(_:)`: some input nodes deliver Int16 — without
+        // this branch the WAV would silently contain only zeros.
+        for ch in 0..<channelCount {
+          memcpy(dst[ch] + Int(writeOffset),
+                 src[ch],
+                 frames * MemoryLayout<Int16>.size)
         }
       }
       writeOffset += chunk.frameLength

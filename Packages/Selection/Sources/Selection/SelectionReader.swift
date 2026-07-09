@@ -15,8 +15,11 @@ private let log = Logger(subsystem: "swiss.weckherlin.tide", category: "selectio
 /// contents before returning, so the user shouldn't notice.
 public enum SelectionReader {
   /// Best-effort read. Returns `nil` if both strategies fail (no
-  /// permission, no selection, or unsupported app).
-  public static func readFromFrontmostApp() -> SelectedText? {
+  /// permission, no selection, or unsupported app). `async` because the
+  /// ⌘C fallback waits for the copy to land — as awaited sleeps, never
+  /// by blocking the main thread.
+  @MainActor
+  public static func readFromFrontmostApp() async -> SelectedText? {
     guard AXIsProcessTrusted() else {
       log.debug("not AX-trusted")
       return nil
@@ -31,7 +34,7 @@ public enum SelectionReader {
       return viaAX
     }
     log.debug("AX miss — falling back to ⌘C")
-    if let viaCopy = readViaClipboardCopy(frontApp: frontApp) {
+    if let viaCopy = await readViaClipboardCopy(frontApp: frontApp) {
       log.debug("selection via ⌘C (\(viaCopy.text.count, privacy: .public) chars)")
       return viaCopy
     }
@@ -66,27 +69,28 @@ public enum SelectionReader {
 
   // MARK: - Strategy 2: simulated ⌘C
 
-  private static func readViaClipboardCopy(frontApp: NSRunningApplication) -> SelectedText? {
+  @MainActor
+  private static func readViaClipboardCopy(frontApp: NSRunningApplication) async -> SelectedText? {
     let pasteboard = NSPasteboard.general
+    let original = PasteboardSnapshot(pasteboard)
     let originalString = pasteboard.string(forType: .string)
     let originalChangeCount = pasteboard.changeCount
 
-    sendCommandC()
+    await sendCommandC()
 
-    // Wait up to 200ms for the copy to land in the pasteboard.
+    // Wait up to 200ms for the copy to land in the pasteboard. Awaited
+    // sleeps keep the main thread responsive during the poll.
     let deadline = Date().addingTimeInterval(0.2)
     while Date() < deadline && pasteboard.changeCount == originalChangeCount {
-      Thread.sleep(forTimeInterval: 0.01)
+      try? await Task.sleep(for: .milliseconds(10))
     }
 
     let copied = pasteboard.string(forType: .string)
 
-    // Restore original clipboard contents. We do this BEFORE returning
-    // so the user's clipboard is intact whether or not we extracted text.
-    pasteboard.clearContents()
-    if let originalString {
-      pasteboard.setString(originalString, forType: .string)
-    }
+    // Restore original clipboard contents (all items and types, not just
+    // plain text). We do this BEFORE returning so the user's clipboard is
+    // intact whether or not we extracted text.
+    original.restore(to: pasteboard)
 
     guard let text = copied,
           !text.isEmpty,
@@ -102,7 +106,7 @@ public enum SelectionReader {
   }
 
   /// Posts a ⌘C key combination to the frontmost app via CGEvents.
-  private static func sendCommandC() {
+  private static func sendCommandC() async {
     let source = CGEventSource(stateID: .combinedSessionState)
     let cKey: CGKeyCode = 0x08
     let cmdKey: CGKeyCode = 0x37
@@ -117,11 +121,11 @@ public enum SelectionReader {
     cUp.flags = .maskCommand
     cmdUp.flags = []
     cmdDown.post(tap: .cghidEventTap)
-    usleep(8_000)
+    try? await Task.sleep(for: .milliseconds(8))
     cDown.post(tap: .cghidEventTap)
-    usleep(8_000)
+    try? await Task.sleep(for: .milliseconds(8))
     cUp.post(tap: .cghidEventTap)
-    usleep(8_000)
+    try? await Task.sleep(for: .milliseconds(8))
     cmdUp.post(tap: .cghidEventTap)
   }
 

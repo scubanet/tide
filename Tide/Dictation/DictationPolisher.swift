@@ -71,7 +71,7 @@ final class DictationPolisher {
     // Lazy guard: if the user removed their API key we'd otherwise
     // wait the full timeout window for the provider to ECONNREFUSED.
     // Short-circuit so the fallback notification fires immediately.
-    guard let key = KeychainHelper.get(key: "anthropic.api_key"),
+    guard let key = KeychainHelper.get(key: KeychainKey.anthropic),
           !key.isEmpty
     else {
       throw PolishError.missingAPIKey

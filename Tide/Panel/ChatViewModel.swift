@@ -33,8 +33,16 @@ final class ChatViewModel {
 
   private let quickActionLibrary = QuickActionLibrary()
 
-  /// Quick actions available to the panel UI.
-  var availableActions: [QuickAction] { quickActionLibrary.all() }
+  /// Quick actions available to the panel UI. Cached — `all()` decodes
+  /// the custom-actions JSON from UserDefaults, which must not happen on
+  /// every `ChatContainer.body` evaluation (i.e. every keystroke).
+  /// Reloaded via `QuickActionLibrary.didChange` when the editor mutates.
+  private(set) var availableActions: [QuickAction] = []
+  /// Written once in init, read in deinit — by then no other reference
+  /// can touch it concurrently. `@ObservationIgnored` keeps the
+  /// `@Observable` macro from rewriting it (observers aren't UI state).
+  @ObservationIgnored
+  private nonisolated(unsafe) var quickActionsObserver: (any NSObjectProtocol)?
 
   /// Whether the Send button should be enabled. The user can send when
   /// any of these is true:
@@ -50,8 +58,7 @@ final class ChatViewModel {
 
   private var recorder: AudioRecorder?
   private var partialTask: Task<Void, Never>?
-  private let synthesizer: CompositeSynthesizer
-  private var pendingForTTS: String = ""
+  private let speech: SpeechPlayback
 
   /// Handle to the in-flight streaming Task so it can be cancelled
   /// (Stop button / ⌘.). Cancelling it tears down the SSE URLSession
@@ -96,27 +103,25 @@ final class ChatViewModel {
     self.conversationStore = conversationStore
     self.provider = provider
     self.settings = settings
+    self.speech = SpeechPlayback(settings: settings)
 
-    let apple = AppleSynthesizer()
-    let elevenLabsKey = KeychainHelper.get(key: "elevenlabs.api_key")
-    let elevenLabs: ElevenLabsSynthesizer?
-    if let key = elevenLabsKey, !key.isEmpty {
-      elevenLabs = ElevenLabsSynthesizer(
-        client: ElevenLabsClient(apiKey: key),
-        defaultVoiceID: settings.elevenLabsVoiceID
-      )
-    } else {
-      elevenLabs = nil
+    availableActions = quickActionLibrary.all()
+    quickActionsObserver = NotificationCenter.default.addObserver(
+      forName: QuickActionLibrary.didChange, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        guard let self else { return }
+        self.availableActions = self.quickActionLibrary.all()
+      }
     }
-    let ttsProvider: CompositeSynthesizer.Provider =
-      (settings.ttsProvider == "elevenLabs") ? .elevenLabs : .apple
-    self.synthesizer = CompositeSynthesizer(
-      apple: apple,
-      elevenLabs: elevenLabs,
-      provider: ttsProvider
-    )
 
     loadActiveConversation()
+  }
+
+  deinit {
+    if let quickActionsObserver {
+      NotificationCenter.default.removeObserver(quickActionsObserver)
+    }
   }
 
   private func loadActiveConversation() {
@@ -137,8 +142,7 @@ final class ChatViewModel {
   /// that already streamed stays in the chat.
   func cancelStreaming() {
     streamTask?.cancel()
-    synthesizer.stop()
-    pendingForTTS = ""
+    speech.stop()
   }
 
   /// Re-run the last failed response in place (banner "Wiederholen").
@@ -229,7 +233,7 @@ final class ChatViewModel {
     while true {
       attempt += 1
       assistantMsg.content = ""
-      pendingForTTS = ""
+      speech.discardPending()
       do {
         let llmMessages = messages.dropLast().map { msg in
           LLMMessage(
@@ -246,19 +250,21 @@ final class ChatViewModel {
         for try await chunk in stream {
           if case let .text(t) = chunk {
             assistantMsg.content += t
-            speakIfEnabled(t)
+            speech.ingest(t)
           }
         }
-        flushTTS()
-        do { try conversationStore.append(assistantMsg, to: conv) }
+        speech.flush()
+        // The placeholder was appended before streaming — only persist
+        // the streamed content here, never re-append.
+        do { try conversationStore.save() }
         catch { Self.log.warning("persist assistant message failed: \(error.localizedDescription, privacy: .public)") }
         lastError = nil
         return
       } catch {
         // Cancellation (Stop button): keep the partial answer, persist, quit.
         if Task.isCancelled {
-          pendingForTTS = ""
-          try? conversationStore.append(assistantMsg, to: conv)
+          speech.discardPending()
+          try? conversationStore.save()
           return
         }
         // 429 → exponential backoff auto-retry (seeded by retry-after).
@@ -268,16 +274,16 @@ final class ChatViewModel {
           try? await Task.sleep(nanoseconds: UInt64(min(backoff, 60) * 1_000_000_000))
           continue
         }
-        handleStreamError(error, assistantMsg: assistantMsg, conv: conv)
+        handleStreamError(error)
         return
       }
     }
   }
 
-  private func handleStreamError(_ error: Error, assistantMsg: Message, conv: Conversation) {
-    pendingForTTS = ""
+  private func handleStreamError(_ error: Error) {
+    speech.discardPending()
     // Persist whatever partial text streamed before the failure.
-    try? conversationStore.append(assistantMsg, to: conv)
+    try? conversationStore.save()
     if let llm = error as? LLMError {
       switch llm {
       case .unauthorized:          lastError = .unauthorized
@@ -289,35 +295,6 @@ final class ChatViewModel {
     } else {
       lastError = .network(error.localizedDescription)
     }
-  }
-
-  private func speakIfEnabled(_ t: String) {
-    guard settings.voiceEnabled else { return }
-    pendingForTTS += t
-    while let range = pendingForTTS.range(
-      of: #"[\.!\?][\s\n]"#, options: .regularExpression
-    ) {
-      let sentence = String(pendingForTTS[..<range.upperBound])
-      speakSentence(sentence)
-      pendingForTTS.removeSubrange(..<range.upperBound)
-    }
-  }
-
-  private func flushTTS() {
-    if settings.voiceEnabled, !pendingForTTS.isEmpty { speakSentence(pendingForTTS) }
-    pendingForTTS = ""
-  }
-
-  private func speakSentence(_ sentence: String) {
-    // Pick up the latest user-chosen provider + voice each sentence.
-    let prov: CompositeSynthesizer.Provider =
-      (settings.ttsProvider == "elevenLabs") ? .elevenLabs : .apple
-    synthesizer.setProvider(prov)
-    let voiceID = (prov == .elevenLabs)
-      ? settings.elevenLabsVoiceID
-      : settings.voiceIdentifier
-    synthesizer.setVoice(identifier: voiceID)
-    synthesizer.speak(sentence)
   }
 
   func startNew() {
@@ -377,46 +354,22 @@ final class ChatViewModel {
   }
 
   /// Stop any in-flight or queued TTS playback. Safe to call when
-  /// nothing is speaking — synthesizer.stop() is a no-op in that case.
-  /// We also clear the sentence-buffer so a still-streaming LLM response
-  /// doesn't immediately resume speech with the leftover tokens; the
-  /// remaining text still lands in the chat as usual (we only mute the
-  /// audio, never the visible message).
+  /// nothing is speaking — a no-op in that case. Also clears the
+  /// sentence-buffer so a still-streaming LLM response doesn't
+  /// immediately resume speech with the leftover tokens; the remaining
+  /// text still lands in the chat as usual (we only mute the audio,
+  /// never the visible message).
   func stopSpeaking() {
-    synthesizer.stop()
-    pendingForTTS = ""
+    speech.stop()
   }
 
   func startRecording() async {
     guard !isRecording else { return }
-    synthesizer.stop()
+    speech.stop()
     clearSTTHint()
-    // Recognizer is chosen per-session from current settings.
-    // We pre-create the AudioBufferAccumulator and hand the *same*
-    // instance to both makeRecognizer (so its bufferProvider closure
-    // can pull WAV-data on stop()) and AudioRecorder (so its tap
-    // can push PCM into it). This avoids the previous design where
-    // the closure had to reach back to `self.recorder?.bufferAccumulator`
-    // through a MainActor-hop — which crashed when the closure was
-    // invoked from ElevenLabsRecognizer.stop()'s async executor.
-    let choice = SpeechRecognizerChoice(rawValue: settings.speechRecognizer)
-      ?? .default
-    let apiKey = KeychainHelper.get(key: "elevenlabs.api_key")
-    let accumulator = AudioBufferAccumulator()
-    let localStore = WhisperModelStore()
-    let recognizer = RecognizerFactory.make(
-      for: choice,
-      apiKey: apiKey,
-      accumulator: accumulator,
-      vocabulary: settings.customVocabulary,
-      localModelName: settings.localModelName,
-      localModelInstalled: localStore.isInstalled(settings.localModelName),
-      transcriber: LocalTranscriberHolder.shared.transcriber
-    )
-    let recorder = AudioRecorder(
-      recognizer: recognizer,
-      bufferAccumulator: accumulator
-    )
+    // Recognizer + recorder are built per-session from current settings
+    // via the shared factory (same code path as DictationCoordinator).
+    let recorder = RecordingSession.makeRecorder(settings: settings)
     self.recorder = recorder
     liveTranscript = ""
     isRecording = true
@@ -462,10 +415,7 @@ final class ChatViewModel {
       let finalText = try await recorder.stop()
       let trimmed = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
       let duration = recorder.bufferAccumulator.duration
-      let isReject = trimmed.isEmpty
-        || TranscriptionQuality.shouldRejectRecording(duration: duration)
-        || TranscriptionQuality.isLikelyArtifact(trimmed, recordingDuration: duration)
-      if isReject {
+      if TranscriptionQuality.isReject(trimmed, duration: duration) {
         // Too short / likely a hallucination — drop it (no send, no
         // wasted Claude call) but tell the user something was heard-and-
         // rejected, matching the design's STT-failed feedback.

@@ -18,11 +18,11 @@ struct DictationSection: View {
     var id: String { rawValue }
     var label: String {
       switch self {
-      case .polished:     "Polished"
-      case .calmer:       "Calmer"
+      case .polished:     "Poliert"
+      case .calmer:       "Ruhiger"
       case .emoji:        "Emoji"
-      case .bullets:      "Bullets"
-      case .professional: "Professional"
+      case .bullets:      "Stichpunkte"
+      case .professional: "Professionell"
       }
     }
     @MainActor var `default`: String {
@@ -65,7 +65,7 @@ struct DictationSection: View {
           .foregroundStyle(.secondary)
 
         TextEditor(text: promptBinding(for: selectedMode))
-          .font(.system(size: 12, design: .monospaced))
+          .font(.callout.monospaced())
           .frame(minHeight: 120)
           .overlay(
             RoundedRectangle(cornerRadius: 4)

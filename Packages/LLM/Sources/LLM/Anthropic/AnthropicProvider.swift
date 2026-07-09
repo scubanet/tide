@@ -5,12 +5,20 @@ import Foundation
 /// the `content_block_start` for the tool — v1 doesn't service tool
 /// calls yet, but the event is surfaced so future code paths can.
 public final class AnthropicProvider: LLMProvider {
-  private let apiKey: String
+  private let apiKeyProvider: @Sendable () -> String
   private let session: URLSession
 
-  public init(apiKey: String, session: URLSession = .shared) {
-    self.apiKey = apiKey
+  /// `apiKeyProvider` is consulted per request, so a key saved while the
+  /// app is running (onboarding, Settings) takes effect on the next send
+  /// — no relaunch needed.
+  public init(apiKeyProvider: @escaping @Sendable () -> String, session: URLSession = .shared) {
+    self.apiKeyProvider = apiKeyProvider
     self.session = session
+  }
+
+  /// Convenience for a fixed key (tests, CLI usage).
+  public convenience init(apiKey: String, session: URLSession = .shared) {
+    self.init(apiKeyProvider: { apiKey }, session: session)
   }
 
   public func streamChat(
@@ -20,10 +28,10 @@ public final class AnthropicProvider: LLMProvider {
     systemPrompt: String?
   ) -> AsyncThrowingStream<LLMChunk, Error> {
     AsyncThrowingStream { continuation in
-      let task = Task { [apiKey, session] in
+      let task = Task { [apiKeyProvider, session] in
         do {
           let request = try AnthropicRequestBuilder.makeRequest(
-            apiKey: apiKey, messages: messages, tools: tools,
+            apiKey: apiKeyProvider(), messages: messages, tools: tools,
             model: model, systemPrompt: systemPrompt
           )
           let (bytes, response) = try await session.bytes(for: request)
@@ -49,17 +57,20 @@ public final class AnthropicProvider: LLMProvider {
           // forum bug). Empty lines are exactly how SSE separates events,
           // so we read raw bytes and scan for the `\n\n` terminator ourselves.
           var buffer = Data()
-          let separator = Data([0x0a, 0x0a])
+          let newline: UInt8 = 0x0a
           for try await byte in bytes {
             buffer.append(byte)
-            while let range = buffer.range(of: separator) {
-              let blockData = buffer.subdata(in: 0..<range.lowerBound)
-              buffer.removeSubrange(0..<range.upperBound)
-              guard let blockStr = String(data: blockData, encoding: .utf8) else { continue }
-              let events = SSEParser.parse(blockStr)
-              for event in events {
-                try handle(event, into: continuation)
-              }
+            // An event can only complete on the byte that finishes a
+            // "\n\n" pair, so checking the buffer tail is enough — no
+            // full-buffer scan per byte (that was O(n²) per event block).
+            guard byte == newline, buffer.count >= 2,
+                  buffer[buffer.count - 2] == newline else { continue }
+            let blockData = buffer.subdata(in: 0..<(buffer.count - 2))
+            buffer.removeAll(keepingCapacity: true)
+            guard let blockStr = String(data: blockData, encoding: .utf8) else { continue }
+            let events = SSEParser.parse(blockStr)
+            for event in events {
+              try handle(event, into: continuation)
             }
           }
           // End-of-stream flush: if anything is left in `buffer`, treat it
@@ -86,7 +97,15 @@ public final class AnthropicProvider: LLMProvider {
   private func handle(_ event: SSEEvent, into continuation: AsyncThrowingStream<LLMChunk, Error>.Continuation) throws {
     if event.event == "error" {
       let msg = Self.errorMessage(fromEventData: event.data) ?? "stream error"
-      throw LLMError.serverError(code: 0, message: msg)
+      // Anthropic signals transient overload/rate-limiting mid-stream as
+      // an SSE error event, not an HTTP 429 — map it onto `.rateLimit`
+      // so the caller's existing backoff/retry path applies.
+      switch Self.errorType(fromEventData: event.data) {
+      case "overloaded_error", "rate_limit_error":
+        throw LLMError.rateLimit(retryAfterSeconds: 10)
+      default:
+        throw LLMError.serverError(code: 0, message: msg)
+      }
     }
     if let chunk = decodeChunk(event: event) {
       continuation.yield(chunk)
@@ -119,6 +138,14 @@ public final class AnthropicProvider: LLMProvider {
   private static func errorMessage(fromEventData data: String) -> String? {
     guard let d = data.data(using: .utf8) else { return nil }
     return errorMessage(fromBody: d)
+  }
+
+  /// `error.type` of an SSE error event, e.g. `"overloaded_error"`.
+  private static func errorType(fromEventData data: String) -> String? {
+    guard let d = data.data(using: .utf8),
+          let json = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+          let err = json["error"] as? [String: Any] else { return nil }
+    return err["type"] as? String
   }
 
   private func decodeChunk(event: SSEEvent) -> LLMChunk? {

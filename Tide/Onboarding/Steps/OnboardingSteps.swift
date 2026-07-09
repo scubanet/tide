@@ -22,7 +22,6 @@ struct WelcomeStep: View {
 
 struct ApiKeyStep: View {
   @Binding var hasKey: Bool
-  @State private var input = ""
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -33,14 +32,9 @@ struct ApiKeyStep: View {
         Label("API-Key gesetzt", systemImage: "checkmark.circle.fill")
           .foregroundStyle(.green)
       }
-      SecureField("sk-ant-…", text: $input)
-        .textFieldStyle(.roundedBorder)
-      Button("Speichern") {
-        try? KeychainHelper.set(key: "anthropic.api_key", value: input)
-        hasKey = KeychainHelper.get(key: "anthropic.api_key")?.isEmpty == false
-        input = ""
+      ApiKeyField {
+        hasKey = KeychainHelper.get(key: KeychainKey.anthropic)?.isEmpty == false
       }
-      .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
     }
   }
 }
@@ -107,7 +101,7 @@ struct HotkeyStep: View {
         .font(.caption).foregroundStyle(.secondary)
       KeyboardShortcuts.Recorder("Push-to-Talk:", name: .pushToTalk)
       KeyboardShortcuts.Recorder("Diktieren (Roh):", name: .dictateRaw)
-      Text("Weitere Diktat-Modi (Polished, Calmer, …) bindest du später unter "
+      Text("Weitere Diktat-Modi (Poliert, Ruhiger, …) bindest du später unter "
         + "Einstellungen → Diktat → Hotkey.")
         .font(.caption).foregroundStyle(.secondary)
     }

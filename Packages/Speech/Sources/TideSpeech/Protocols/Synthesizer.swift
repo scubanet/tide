@@ -1,9 +1,11 @@
 import Foundation
 
-/// Text-to-speech abstraction. Implementations are expected to be
-/// thread-safe — `speak(_:)` can be called from any context (typically
-/// from the streaming-LLM token loop on MainActor). The implementation
-/// queues utterances internally.
+/// Text-to-speech abstraction. Main-actor isolated: playback state
+/// (players, queues, the underlying AV objects) lives in a single
+/// isolation domain, so implementations need no locks and the type
+/// system enforces what convention used to. Callers (the streaming-LLM
+/// token loop, Settings) already run on the main actor.
+@MainActor
 public protocol Synthesizer: Sendable {
   /// Queue `text` for playback. Returns immediately. Speech happens
   /// asynchronously on the audio output.
@@ -13,8 +15,7 @@ public protocol Synthesizer: Sendable {
   func stop()
 
   /// Update which voice subsequent `speak(_:)` calls should use.
-  /// Already-queued utterances keep their original voice. Safe to call
-  /// from any thread; implementations serialise internally.
+  /// Already-queued utterances keep their original voice.
   func setVoice(identifier: String)
 
   /// Whether playback is currently active. Useful for UI toggles.

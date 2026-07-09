@@ -11,9 +11,12 @@ private let log = Logger(subsystem: "swiss.weckherlin.tide", category: "tts.elev
 /// serial — the next clip starts only after the previous one finishes.
 /// This matches `AppleSynthesizer`'s queue semantics so the rest of the
 /// app doesn't need to care which provider is active.
-public final class ElevenLabsSynthesizer: NSObject, Synthesizer, @unchecked Sendable {
+///
+/// Isolation: the whole class is `@MainActor` (via `Synthesizer`), so
+/// queue state and the `AVAudioPlayer` lifecycle live in one domain —
+/// no lock, and `stop()` can never race a player mid-construction.
+public final class ElevenLabsSynthesizer: NSObject, Synthesizer {
   private let client: ElevenLabsClient
-  private let lock = NSLock()
   private var voiceID: String
   // Ordered playback queue — audio clips ready to play, in original speak() order.
   private var audioQueue: [Data] = []
@@ -30,6 +33,10 @@ public final class ElevenLabsSynthesizer: NSObject, Synthesizer, @unchecked Send
   // freshly-reset queue.
   private var generation: Int = 0
   private var currentPlayer: AVAudioPlayer?
+  // In-flight synthesis requests keyed by sequence. `stop()` cancels them
+  // — cancellation propagates into URLSession, so abandoned requests
+  // don't keep running (or keep `self` alive) after the user hit stop.
+  private var inflightTasks: [Int: Task<Void, Never>] = [:]
 
   public init(client: ElevenLabsClient, defaultVoiceID: String) {
     self.client = client
@@ -38,40 +45,40 @@ public final class ElevenLabsSynthesizer: NSObject, Synthesizer, @unchecked Send
   }
 
   public var isSpeaking: Bool {
-    lock.lock(); defer { lock.unlock() }
-    return currentPlayer?.isPlaying == true || !audioQueue.isEmpty || !pendingAudio.isEmpty
+    currentPlayer?.isPlaying == true || !audioQueue.isEmpty || !pendingAudio.isEmpty
   }
 
   public func setVoice(identifier: String) {
-    lock.lock(); defer { lock.unlock() }
     voiceID = identifier
   }
 
   public func speak(_ text: String) {
     guard !text.isEmpty else { return }
-    lock.lock()
     let id = voiceID
     let seq = nextSequence
     nextSequence += 1
     let gen = generation
-    lock.unlock()
     log.debug("requesting TTS seq=\(seq, privacy: .public) (\(text.count, privacy: .public) chars)")
-    Task { [client] in
+    inflightTasks[seq] = Task { [client, weak self] in
       do {
         let data = try await client.synthesize(text: text, voiceID: id)
         log.debug("TTS arrived seq=\(seq, privacy: .public) (\(data.count, privacy: .public) bytes)")
-        await MainActor.run { self.deliver(gen: gen, seq: seq, data: data) }
+        self?.deliver(gen: gen, seq: seq, data: data)
       } catch {
-        log.error("TTS seq=\(seq, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+        if !(error is CancellationError) {
+          log.error("TTS seq=\(seq, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+        }
         // Mark this slot as a no-op so subsequent ones still flush.
-        await MainActor.run { self.skip(gen: gen, seq: seq) }
+        self?.skip(gen: gen, seq: seq)
       }
+      self?.inflightTasks[seq] = nil
     }
   }
 
   public func stop() {
-    lock.lock()
     generation += 1
+    for task in inflightTasks.values { task.cancel() }
+    inflightTasks.removeAll()
     audioQueue.removeAll()
     pendingAudio.removeAll()
     // Reset sequence numbers so the next response cycle starts at 0.
@@ -79,59 +86,43 @@ public final class ElevenLabsSynthesizer: NSObject, Synthesizer, @unchecked Send
     nextToEnqueue = 0
     currentPlayer?.stop()
     currentPlayer = nil
-    lock.unlock()
   }
 
   // MARK: - Reorder buffer
 
-  @MainActor
   private func deliver(gen: Int, seq: Int, data: Data) {
-    lock.lock()
-    guard gen == generation else { lock.unlock(); return }  // stale cycle
+    guard gen == generation else { return }  // stale cycle
     pendingAudio[seq] = data
     // Drain any contiguous prefix into the playback queue.
     while let ready = pendingAudio.removeValue(forKey: nextToEnqueue) {
       audioQueue.append(ready)
       nextToEnqueue += 1
     }
-    let shouldStart = currentPlayer == nil && !audioQueue.isEmpty
-    lock.unlock()
-    if shouldStart { playNext() }
+    if currentPlayer == nil && !audioQueue.isEmpty { playNext() }
   }
 
-  @MainActor
   private func skip(gen: Int, seq: Int) {
-    lock.lock()
-    guard gen == generation else { lock.unlock(); return }  // stale cycle
+    guard gen == generation else { return }  // stale cycle
     pendingAudio[seq] = Data()  // empty marker
     while let ready = pendingAudio.removeValue(forKey: nextToEnqueue) {
       if !ready.isEmpty { audioQueue.append(ready) }
       nextToEnqueue += 1
     }
-    let shouldStart = currentPlayer == nil && !audioQueue.isEmpty
-    lock.unlock()
-    if shouldStart { playNext() }
+    if currentPlayer == nil && !audioQueue.isEmpty { playNext() }
   }
 
   // MARK: - Playback
 
-  @MainActor
   private func playNext() {
-    lock.lock()
     guard !audioQueue.isEmpty else {
       currentPlayer = nil
-      lock.unlock()
       return
     }
     let data = audioQueue.removeFirst()
-    lock.unlock()
-
     do {
       let player = try AVAudioPlayer(data: data)
       player.delegate = self
-      lock.lock()
       currentPlayer = player
-      lock.unlock()
       player.prepareToPlay()
       player.play()
     } catch {
@@ -142,7 +133,7 @@ public final class ElevenLabsSynthesizer: NSObject, Synthesizer, @unchecked Send
 }
 
 extension ElevenLabsSynthesizer: AVAudioPlayerDelegate {
-  public func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+  nonisolated public func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
     Task { @MainActor in self.playNext() }
   }
 }

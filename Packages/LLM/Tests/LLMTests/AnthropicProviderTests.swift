@@ -88,7 +88,9 @@ final class AnthropicProviderTests: XCTestCase {
     }
   }
 
-  func test_midStreamErrorEvent_throwsServerError() async {
+  func test_midStreamOverloadedEvent_throwsRateLimit() async {
+    // `overloaded_error` is Anthropic's mid-stream 429 equivalent — it must
+    // map onto .rateLimit so the caller's backoff/retry path applies.
     let sseBody = """
     event: content_block_delta
     data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}
@@ -109,9 +111,34 @@ final class AnthropicProviderTests: XCTestCase {
     do {
       for try await _ in stream {}
       XCTFail("Expected throw on mid-stream error")
+    } catch let LLMError.rateLimit(retryAfter) {
+      XCTAssertEqual(retryAfter, 10)
+    } catch {
+      XCTFail("Expected LLMError.rateLimit, got \(error)")
+    }
+  }
+
+  func test_midStreamErrorEvent_throwsServerError() async {
+    let sseBody = """
+    event: error
+    data: {"type":"error","error":{"type":"api_error","message":"Internal"}}
+
+    """
+    MockURLProtocol.handler = { request in
+      let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+      return (response, sseBody.data(using: .utf8)!)
+    }
+    let provider = AnthropicProvider(apiKey: "sk-test", session: makeSession())
+    let stream = provider.streamChat(
+      messages: [LLMMessage(role: .user, content: "Hi")],
+      tools: [], model: "m", systemPrompt: nil
+    )
+    do {
+      for try await _ in stream {}
+      XCTFail("Expected throw on mid-stream error")
     } catch let LLMError.serverError(code, message) {
       XCTAssertEqual(code, 0)
-      XCTAssertTrue(message.contains("Overloaded") || message.contains("overloaded_error"),
+      XCTAssertTrue(message.contains("Internal") || message.contains("api_error"),
         "message was: \(message)")
     } catch {
       XCTFail("Expected LLMError.serverError, got \(error)")

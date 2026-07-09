@@ -8,9 +8,11 @@ private let log = Logger(subsystem: "swiss.weckherlin.tide", category: "tts")
 /// German voice; pass a different identifier to switch. Queue-style
 /// behaviour is inherited from AVSpeechSynthesizer — repeated `speak(_:)`
 /// calls append utterances rather than interrupting.
-public final class AppleSynthesizer: NSObject, Synthesizer, @unchecked Sendable {
+///
+/// Isolation: `@MainActor` via `Synthesizer` — all touches of `synth`
+/// (which is not documented as thread-safe) happen in one domain.
+public final class AppleSynthesizer: NSObject, Synthesizer {
   private let synth = AVSpeechSynthesizer()
-  private let lock = NSLock()
   private var voiceIdentifier: String
 
   public init(voiceIdentifier: String = "com.apple.voice.compact.de-DE.Anna") {
@@ -18,36 +20,24 @@ public final class AppleSynthesizer: NSObject, Synthesizer, @unchecked Sendable 
     super.init()
   }
 
-  // The lock guards `voiceIdentifier` AND every touch of `synth`
-  // (speak/stop/isSpeaking) — AVSpeechSynthesizer is not documented as
-  // thread-safe, and `@unchecked Sendable` promises callers full
-  // thread-safety, so the lock has to cover all of it, not just the voice.
-  public var isSpeaking: Bool { lock.withLock { synth.isSpeaking } }
+  public var isSpeaking: Bool { synth.isSpeaking }
 
   public func setVoice(identifier: String) {
-    lock.lock()
-    defer { lock.unlock() }
     voiceIdentifier = identifier
     log.debug("voice set to \(identifier, privacy: .public)")
   }
 
   public func speak(_ text: String) {
     guard !text.isEmpty else { return }
-    lock.lock()
-    defer { lock.unlock() }
-    let id = voiceIdentifier
-
     let utterance = AVSpeechUtterance(string: text)
-    utterance.voice = AVSpeechSynthesisVoice(identifier: id)
+    utterance.voice = AVSpeechSynthesisVoice(identifier: voiceIdentifier)
       ?? AVSpeechSynthesisVoice(language: "de-DE")
     utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-    log.debug("speak(\(text.count, privacy: .public) chars, voice=\(id, privacy: .public))")
+    log.debug("speak(\(text.count, privacy: .public) chars, voice=\(self.voiceIdentifier, privacy: .public))")
     synth.speak(utterance)
   }
 
   public func stop() {
-    lock.lock()
-    defer { lock.unlock() }
     log.debug("stop")
     synth.stopSpeaking(at: .immediate)
   }

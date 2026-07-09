@@ -17,7 +17,7 @@ struct ChatContainer: View {
         selectedSlug: $viewModel.selectedActionSlug
       )
       Divider()
-      MessageList(messages: viewModel.messages)
+      MessageList(messages: viewModel.messages, isStreaming: viewModel.isStreaming)
       if let error = viewModel.lastError {
         errorBanner(error)
       }

@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 import Core
 import TideSpeech
 
@@ -68,7 +69,13 @@ struct LocalModelSection: View {
   private func prewarmIfInstalled(_ id: String) {
     guard store.isInstalled(id),
           let transcriber = LocalTranscriberHolder.shared.transcriber else { return }
-    Task.detached { try? await transcriber.prewarm(modelName: id) }
+    Task {
+      do { try await transcriber.prewarm(modelName: id) }
+      catch {
+        Logger(subsystem: "swiss.weckherlin.tide", category: "whisperkit")
+          .error("prewarm failed: \(error.localizedDescription, privacy: .public)")
+      }
+    }
   }
 
   private func download(_ id: String) {
